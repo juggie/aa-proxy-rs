@@ -1,0 +1,33 @@
+[package]
+name = "aa-proxy-rs"
+authors = ['Mariusz Białończyk']
+version = "0.1.0"
+edition = "2021"
+license = 'GPL-2.0'
+description = 'AndroidAuto wired/wireless proxy'
+documentation = 'https://github.com/manio/aa-proxy-rs'
+readme = 'README.md'
+categories = ['command-line-utilities']
+homepage = 'https://github.com/manio/aa-proxy-rs'
+repository = 'https://github.com/manio/aa-proxy-rs'
+
+[dependencies]
+dbus = {version = "0.9.7", features = ["vendored"]}
+bluer = { version = "0.17.3", features = ["full"] }
+futures = "0.3.31"
+kobject-uevent = "0.1.1"
+netlink-sys = "0.8.6"
+protobuf = "3.7.1"
+tokio = { version = "1.41.0", features = ["full"] }
+tokio-fd = "0.3.0"
+tokio-uring = "0.5.0"
+mac_address = "1.1.7"
+bytesize = "1.3.0"
+simplelog = { version = "0.11.2", features = ["paris", "ansi_term"] }
+clap = { version = "3.0.13", features = ["derive"] }
+humantime = "2.1.0"
+log = "0.4.22"
+
+[build-dependencies]
+protoc-bin-vendored = "3.1.0"
+protobuf-codegen = "3.7.1"
