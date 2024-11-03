@@ -98,6 +98,10 @@ OPTIONS:
     -V, --version                     Print version information
 ```
 
+## Troubleshooting
+Sometimes deleting the system Bluetooth cache at /var/lib/bluetooth and restarting bluetoothd fixes persistent issues with device connectivity.
+Consider also using "Forget" of bluetooth device in the Android phone.
+
 ## Known problems
 During my development work I encountered the stuck USB adapter once. What is more interesting, a reboots doesn't help, I had to re-power cycle the Pi.
 In the `dmesg` I've got this:
