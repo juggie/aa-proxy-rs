@@ -19,6 +19,10 @@ const HEADER_LEN: usize = 4;
 // module name for logging engine
 const NAME: &str = "<i><bright-black> bluetooth: </>";
 
+// Just a generic Result type to ease error handling for us. Errors in multithreaded
+// async contexts needs some extra restrictions
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
 const AAWG_PROFILE_UUID: &str = "4de17a00-52cb-11e6-bdf4-0800200c9a66";
 const HSP_HS_UUID: &str = "00001108-0000-1000-8000-00805f9b34fb";
 const BT_ALIAS: &str = "WirelessAADongle";
@@ -41,7 +45,7 @@ enum MessageId {
     WifiStartResponse = 7,
 }
 
-pub async fn get_cpu_serial_number_suffix() -> Result<String, Box<dyn std::error::Error>> {
+pub async fn get_cpu_serial_number_suffix() -> Result<String> {
     let mut serial = String::new();
     let contents = tokio::fs::read_to_string("/sys/firmware/devicetree/base/serial-number").await?;
     // check if we read the serial number with correct length
@@ -51,8 +55,7 @@ pub async fn get_cpu_serial_number_suffix() -> Result<String, Box<dyn std::error
     Ok(serial)
 }
 
-async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream), Box<dyn std::error::Error>>
-{
+async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream)> {
     // setting BT alias for further use
     let alias = match get_cpu_serial_number_suffix().await {
         Ok(suffix) => format!("{}-{}", BT_ALIAS, suffix),
@@ -140,11 +143,7 @@ async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream), Box<dyn
     Ok((adapter, stream))
 }
 
-async fn send_message(
-    stream: &mut Stream,
-    id: MessageId,
-    message: impl Message,
-) -> Result<usize, Box<dyn std::error::Error>> {
+async fn send_message(stream: &mut Stream, id: MessageId, message: impl Message) -> Result<usize> {
     let mut packet: Vec<u8> = vec![];
     let mut data = message.write_to_bytes()?;
 
@@ -160,10 +159,7 @@ async fn send_message(
     Ok(stream.write(&packet).await?)
 }
 
-async fn read_message(
-    stream: &mut Stream,
-    id: MessageId,
-) -> Result<usize, Box<dyn std::error::Error>> {
+async fn read_message(stream: &mut Stream, id: MessageId) -> Result<usize> {
     let mut buf = vec![0; HEADER_LEN];
     let n = stream.read_exact(&mut buf).await?;
     debug!("received {} bytes: {:X?}", n, buf);
@@ -190,7 +186,7 @@ async fn read_message(
     Ok(HEADER_LEN + len)
 }
 
-pub async fn bluetooth_setup_connection() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn bluetooth_setup_connection() -> Result<()> {
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
 
