@@ -17,6 +17,9 @@ use std::time::Duration;
 use tokio::runtime::Builder;
 use tokio::sync::Notify;
 
+// module name for logging engine
+const NAME: &str = "<i><bright-black> main: </>";
+
 const TCP_SERVER_PORT: i32 = 5288;
 
 /// AndroidAuto wired/wireless proxy
@@ -77,8 +80,8 @@ fn logging_init(debug: bool, log_path: PathBuf) {
 
     CombinedLogger::init(loggers).expect("Cannot initialize logging subsystem");
     if logfile_error.is_some() {
-        error!("{}", logfile_error.unwrap());
-        warn!("Will do console logging only...");
+        error!("{} {}", NAME, logfile_error.unwrap());
+        warn!("{} Will do console logging only...", NAME);
     }
 }
 
@@ -122,7 +125,8 @@ fn main() {
         env!("GIT_HASH")
     );
     info!(
-        "⚙️ Showing transfer statistics: <b><blue>{}</>",
+        "{} ⚙️ Showing transfer statistics: <b><blue>{}</>",
+        NAME,
         match stats_interval {
             Some(d) => format_duration(d).to_string(),
             None => "disabled".to_string(),
