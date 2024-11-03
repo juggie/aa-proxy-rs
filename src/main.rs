@@ -95,7 +95,15 @@ async fn tokio_main() {
     let mut usb = UsbGadgetState::new();
     usb.init();
 
-    let _ = bluetooth_setup_connection().await;
+    loop {
+        if let Err(e) = bluetooth_setup_connection().await {
+            error!("{} Bluetooth error: {}", NAME, e);
+            info!("{} Trying to recover...", NAME);
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        } else {
+            break;
+        }
+    }
 
     usb.enable_default_and_wait_for_accessory(accessory_started)
         .await;
