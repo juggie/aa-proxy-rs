@@ -76,10 +76,19 @@ and make sure that it is _installed_ on target list:
 ```
 arm-unknown-linux-gnueabihf (installed)
 ```
-Besides a `binutils-arm-linux-gnueabihf` package is needed on Debian. This is distro-depended so I recommend to RTFM.
+Besides a `gcc-arm-linux-gnueabihf` package is needed on Debian. This is distro-depended so I recommend to RTFM.
 
 After building you need to transfer the binary to the target filesystem (I am using ssh/scp for this) and start it.
 For permanent solution I also modified startup scripts - but how to do it is out of scope of this document.
+
+## Building using Docker
+To build with Docker you need to have a [buildx](https://github.com/docker/buildx) and [BuildKit](https://github.com/moby/buildkit).<br>
+Then you can e.g. create some output dir and build the binary like this:
+```
+mkdir out
+DOCKER_BUILDKIT=1 docker build --output out .
+```
+After successful execution the resulting `aa-proxy-rs` will be in `out` directory.
 
 ## Usage
 ```
