@@ -209,21 +209,13 @@ pub async fn bluetooth_setup_connection() -> Result<()> {
     info.set_bssid(bssid);
     info.set_security_mode(SecurityMode::WPA2_PERSONAL);
     info.set_access_point_type(AccessPointType::DYNAMIC);
-    tokio::spawn(async move {
-        send_message(&mut stream, MessageId::WifiInfoResponse, info)
-            .await
-            .unwrap();
-        read_message(&mut stream, MessageId::WifiStartResponse)
-            .await
-            .unwrap();
-        read_message(&mut stream, MessageId::WifiConnectStatus)
-            .await
-            .unwrap();
+    send_message(&mut stream, MessageId::WifiInfoResponse, info).await?;
+    read_message(&mut stream, MessageId::WifiStartResponse).await?;
+    read_message(&mut stream, MessageId::WifiConnectStatus).await?;
 
-        info!("{} 🚀 Bluetooth launch sequence completed", NAME);
-        adapter.set_powered(false).await.unwrap();
-        info!("{} 💤 Bluetooth adapter powered off", NAME);
-    });
+    info!("{} 🚀 Bluetooth launch sequence completed", NAME);
+    adapter.set_powered(false).await?;
+    info!("{} 💤 Bluetooth adapter powered off", NAME);
 
     Ok(())
 }
