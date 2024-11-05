@@ -52,12 +52,14 @@ fn logging_init(debug: bool, log_path: &PathBuf) {
 
     let mut loggers = vec![];
 
+    let requested_level = if debug {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Info
+    };
+
     let console_logger: Box<dyn SharedLogger> = TermLogger::new(
-        if debug {
-            LevelFilter::Debug
-        } else {
-            LevelFilter::Info
-        },
+        requested_level,
         conf.clone(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
@@ -68,7 +70,7 @@ fn logging_init(debug: bool, log_path: &PathBuf) {
     let logfile = OpenOptions::new().create(true).append(true).open(&log_path);
     match logfile {
         Ok(logfile) => {
-            loggers.push(WriteLogger::new(LevelFilter::Info, conf, logfile));
+            loggers.push(WriteLogger::new(requested_level, conf, logfile));
         }
         Err(e) => {
             logfile_error = Some(format!(
