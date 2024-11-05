@@ -44,7 +44,7 @@ struct Args {
     stats_interval: u16,
 }
 
-fn logging_init(debug: bool, log_path: PathBuf) {
+fn logging_init(debug: bool, log_path: &PathBuf) {
     let conf = ConfigBuilder::new()
         .set_time_format("%F, %H:%M:%S%.3f".to_string())
         .set_write_log_enable_colors(true)
@@ -116,7 +116,7 @@ async fn tokio_main() {
 
 fn main() {
     let args = Args::parse();
-    logging_init(args.debug, args.logfile);
+    logging_init(args.debug, &args.logfile);
 
     let stats_interval = {
         if args.stats_interval == 0 {
@@ -131,6 +131,11 @@ fn main() {
         env!("BUILD_DATE"),
         env!("GIT_DATE"),
         env!("GIT_HASH")
+    );
+    info!(
+        "{} 📜 Log file path: <b><green>{}</>",
+        NAME,
+        args.logfile.display()
     );
     info!(
         "{} ⚙️ Showing transfer statistics: <b><blue>{}</>",
