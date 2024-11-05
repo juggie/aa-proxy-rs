@@ -47,9 +47,11 @@ async fn copy_file_to_stream(
         // things look weird: we pass ownership of the buffer to `read`, and we get
         // it back, _even if there was an error_. There's a whole trait for that,
         // which `Vec<u8>` implements!
+        debug!("USB: before read");
         let (res, buf_read) = from.read_at(buf, 0).await;
         // Propagate errors, see how many bytes we read
         let n = res?;
+        debug!("USB: after read, {} bytes", n);
         if n == 0 {
             // A read of size zero signals EOF (end of file), finish gracefully
             return Ok(());
@@ -58,8 +60,10 @@ async fn copy_file_to_stream(
         // The `slice` method here is implemented in an extension trait: it
         // returns an owned slice of our `Vec<u8>`, which we later turn back
         // into the full `Vec<u8>`
+        debug!("USB: before write");
         let (res, buf_write) = to.write(buf_read.slice(..n)).submit().await;
-        res?;
+        let n = res?;
+        debug!("USB: after write, {} bytes", n);
         // Increment byte counters for statistics
         if stats_interval.is_some() {
             bytes_out += n;
@@ -109,9 +113,11 @@ async fn copy_stream_to_file(
         // things look weird: we pass ownership of the buffer to `read`, and we get
         // it back, _even if there was an error_. There's a whole trait for that,
         // which `Vec<u8>` implements!
+        debug!("TCP: before read");
         let (res, buf_read) = from.read(buf).await;
         // Propagate errors, see how many bytes we read
         let n = res?;
+        debug!("TCP: after read, {} bytes", n);
         if n == 0 {
             // A read of size zero signals EOF (end of file), finish gracefully
             return Ok(());
@@ -120,8 +126,10 @@ async fn copy_stream_to_file(
         // The `slice` method here is implemented in an extension trait: it
         // returns an owned slice of our `Vec<u8>`, which we later turn back
         // into the full `Vec<u8>`
+        debug!("TCP: before write");
         let (res, buf_write) = to.write_at(buf_read.slice(..n), 0).submit().await;
-        res?;
+        let n = res?;
+        debug!("TCP: after write, {} bytes", n);
         // Increment byte counters for statistics
         if stats_interval.is_some() {
             bytes_out += n;
