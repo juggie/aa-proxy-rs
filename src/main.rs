@@ -3,6 +3,7 @@ mod io_uring;
 mod usb_gadget;
 
 use bluetooth::bluetooth_setup_connection;
+use bluetooth::bluetooth_stop;
 use clap::Parser;
 use humantime::format_duration;
 use io_uring::io_loop;
@@ -98,12 +99,17 @@ async fn tokio_main() {
     usb.init();
 
     loop {
-        if let Err(e) = bluetooth_setup_connection().await {
-            error!("{} Bluetooth error: {}", NAME, e);
-            info!("{} Trying to recover...", NAME);
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        } else {
-            break;
+        match bluetooth_setup_connection().await {
+            Ok(state) => {
+                // we're ready, gracefully shutdown bluetooth in task
+                tokio::spawn(async move { bluetooth_stop(state).await });
+                break;
+            }
+            Err(e) => {
+                error!("{} Bluetooth error: {}", NAME, e);
+                info!("{} Trying to recover...", NAME);
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
         }
     }
 

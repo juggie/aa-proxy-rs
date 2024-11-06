@@ -1,8 +1,9 @@
 use crate::TCP_SERVER_PORT;
 use bluer::adv::Advertisement;
 use bluer::{
+    adv::AdvertisementHandle,
     agent::Agent,
-    rfcomm::{Profile, Role, Stream},
+    rfcomm::{Profile, ProfileHandle, Role, Stream},
     Adapter,
 };
 use futures::StreamExt;
@@ -45,6 +46,13 @@ enum MessageId {
     WifiStartResponse = 7,
 }
 
+pub struct BluetoothState {
+    adapter: Adapter,
+    handle_ble: AdvertisementHandle,
+    handle_aa: ProfileHandle,
+    // FIXME: handle_hsp: ProfileHandle,
+}
+
 pub async fn get_cpu_serial_number_suffix() -> Result<String> {
     let mut serial = String::new();
     let contents = tokio::fs::read_to_string("/sys/firmware/devicetree/base/serial-number").await?;
@@ -55,7 +63,7 @@ pub async fn get_cpu_serial_number_suffix() -> Result<String> {
     Ok(serial)
 }
 
-async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream)> {
+async fn power_up_and_wait_for_connection() -> Result<(BluetoothState, Stream)> {
     // setting BT alias for further use
     let alias = match get_cpu_serial_number_suffix().await {
         Ok(suffix) => format!("{}-{}", BT_ALIAS, suffix),
@@ -86,8 +94,7 @@ async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream)> {
         local_name: Some(alias),
         ..Default::default()
     };
-    // TODO: properly release this handle at the end
-    let _handle = adapter.advertise(le_advertisement).await?;
+    let handle_ble = adapter.advertise(le_advertisement).await?;
 
     // Default agent is probably needed when pairing for the first time
     let agent = Agent::default();
@@ -103,7 +110,7 @@ async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream)> {
         require_authorization: Some(false),
         ..Default::default()
     };
-    let mut hndl_aa = session.register_profile(profile).await?;
+    let mut handle_aa = session.register_profile(profile).await?;
     info!("{} 📱 AA Wireless Profile: registered", NAME);
 
     // Headset profile
@@ -114,7 +121,7 @@ async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream)> {
         require_authorization: Some(false),
         ..Default::default()
     };
-    let mut hndl_hsp = session.register_profile(profile).await?;
+    let mut handle_hsp = session.register_profile(profile).await?;
     info!("{} 🎧 Headset Profile (HSP): registered", NAME);
 
     info!("{} ⏳ Waiting for phone to connect via bluetooth...", NAME);
@@ -122,7 +129,10 @@ async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream)> {
     // handling connections to headset profile in own task
     tokio::spawn(async move {
         loop {
-            let req = hndl_hsp.next().await.expect("received no connect request");
+            let req = handle_hsp
+                .next()
+                .await
+                .expect("received no connect request");
             info!(
                 "{} 🎧 Headset Profile (HSP): connect from: <b>{}</>",
                 NAME,
@@ -132,7 +142,7 @@ async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream)> {
         }
     });
 
-    let req = hndl_aa.next().await.expect("received no connect request");
+    let req = handle_aa.next().await.expect("received no connect request");
     info!(
         "{} 📱 AA Wireless Profile: connect from: <b>{}</>",
         NAME,
@@ -140,7 +150,14 @@ async fn power_up_and_wait_for_connection() -> Result<(Adapter, Stream)> {
     );
     let stream = req.accept()?;
 
-    Ok((adapter, stream))
+    // generate structure with adapter and handlers for graceful shutdown later
+    let state = BluetoothState {
+        adapter,
+        handle_ble,
+        handle_aa,
+    };
+
+    Ok((state, stream))
 }
 
 async fn send_message(stream: &mut Stream, id: MessageId, message: impl Message) -> Result<usize> {
@@ -186,11 +203,25 @@ async fn read_message(stream: &mut Stream, id: MessageId) -> Result<usize> {
     Ok(HEADER_LEN + len)
 }
 
-pub async fn bluetooth_setup_connection() -> Result<()> {
+pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
+    info!("{} 📣 Removing BLE advertisement", NAME);
+    drop(state.handle_ble);
+    info!("{} 📱 Removing AA profile", NAME);
+    drop(state.handle_aa);
+    // FIXME
+    // info!("{} 🎧 Removing HSP profile", NAME);
+    // drop(state.handle_hsp);
+    state.adapter.set_powered(false).await?;
+    info!("{} 💤 Bluetooth adapter powered off", NAME);
+
+    Ok(())
+}
+
+pub async fn bluetooth_setup_connection() -> Result<BluetoothState> {
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
 
-    let (adapter, mut stream) = power_up_and_wait_for_connection().await?;
+    let (state, mut stream) = power_up_and_wait_for_connection().await?;
 
     info!("{} 📲 Sending parameters via bluetooth to phone...", NAME);
     let mut start_req = WifiStartRequest::new();
@@ -214,8 +245,6 @@ pub async fn bluetooth_setup_connection() -> Result<()> {
     read_message(&mut stream, MessageId::WifiConnectStatus).await?;
 
     info!("{} 🚀 Bluetooth launch sequence completed", NAME);
-    adapter.set_powered(false).await?;
-    info!("{} 💤 Bluetooth adapter powered off", NAME);
 
-    Ok(())
+    Ok(state)
 }
