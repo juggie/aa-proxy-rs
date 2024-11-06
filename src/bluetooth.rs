@@ -81,8 +81,6 @@ async fn power_up_and_wait_for_connection() -> Result<(BluetoothState, Stream)> 
     );
     adapter.set_alias(alias.clone()).await?;
     adapter.set_powered(true).await?;
-    adapter.set_discoverable(true).await?;
-    adapter.set_discoverable_timeout(0).await?;
     adapter.set_pairable(true).await?;
 
     // Perform a Bluetooth LE advertisement
