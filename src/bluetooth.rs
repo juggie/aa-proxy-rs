@@ -10,6 +10,7 @@ use futures::StreamExt;
 use simplelog::*;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
+use tokio::task::JoinHandle;
 
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protobuf::Message;
@@ -124,20 +125,20 @@ async fn power_up_and_wait_for_connection() -> Result<(BluetoothState, Stream)> 
 
     info!("{} ⏳ Waiting for phone to connect via bluetooth...", NAME);
 
-    // handling connections to headset profile in own task
-    tokio::spawn(async move {
-        loop {
-            let req = handle_hsp
-                .next()
-                .await
-                .expect("received no connect request");
-            info!(
-                "{} 🎧 Headset Profile (HSP): connect from: <b>{}</>",
-                NAME,
-                req.device()
-            );
-            let _ = req.accept().unwrap();
-        }
+    // handling connection to headset profile in own task
+    let task_hsp: JoinHandle<Result<ProfileHandle>> = tokio::spawn(async move {
+        let req = handle_hsp
+            .next()
+            .await
+            .expect("received no connect request");
+        info!(
+            "{} 🎧 Headset Profile (HSP): connect from: <b>{}</>",
+            NAME,
+            req.device()
+        );
+        req.accept()?;
+
+        Ok(handle_hsp)
     });
 
     let req = handle_aa.next().await.expect("received no connect request");
