@@ -2,7 +2,7 @@ use crate::TCP_SERVER_PORT;
 use bluer::adv::Advertisement;
 use bluer::{
     adv::AdvertisementHandle,
-    agent::Agent,
+    agent::{Agent, AgentHandle},
     rfcomm::{Profile, ProfileHandle, Role, Stream},
     Adapter,
 };
@@ -52,6 +52,7 @@ pub struct BluetoothState {
     handle_ble: AdvertisementHandle,
     handle_aa: ProfileHandle,
     handle_hsp: JoinHandle<Result<ProfileHandle>>,
+    handle_agent: AgentHandle,
 }
 
 pub async fn get_cpu_serial_number_suffix() -> Result<String> {
@@ -97,7 +98,7 @@ async fn power_up_and_wait_for_connection() -> Result<(BluetoothState, Stream)> 
 
     // Default agent is probably needed when pairing for the first time
     let agent = Agent::default();
-    let _agent_hndl = session.register_agent(agent).await?;
+    let handle_agent = session.register_agent(agent).await?;
 
     // AA Wireless profile
     let profile = Profile {
@@ -155,6 +156,7 @@ async fn power_up_and_wait_for_connection() -> Result<(BluetoothState, Stream)> 
         handle_ble,
         handle_aa,
         handle_hsp: task_hsp,
+        handle_agent,
     };
 
     Ok((state, stream))
@@ -206,6 +208,8 @@ async fn read_message(stream: &mut Stream, id: MessageId) -> Result<usize> {
 pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
     info!("{} 📣 Removing BLE advertisement", NAME);
     drop(state.handle_ble);
+    info!("{} 🥷 Unregistering default agent", NAME);
+    drop(state.handle_agent);
     info!("{} 📱 Removing AA profile", NAME);
     drop(state.handle_aa);
     info!("{} 🎧 Removing HSP profile", NAME);
