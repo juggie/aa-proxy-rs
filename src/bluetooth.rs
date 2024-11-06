@@ -51,7 +51,7 @@ pub struct BluetoothState {
     adapter: Adapter,
     handle_ble: AdvertisementHandle,
     handle_aa: ProfileHandle,
-    // FIXME: handle_hsp: ProfileHandle,
+    handle_hsp: JoinHandle<Result<ProfileHandle>>,
 }
 
 pub async fn get_cpu_serial_number_suffix() -> Result<String> {
@@ -154,6 +154,7 @@ async fn power_up_and_wait_for_connection() -> Result<(BluetoothState, Stream)> 
         adapter,
         handle_ble,
         handle_aa,
+        handle_hsp: task_hsp,
     };
 
     Ok((state, stream))
@@ -207,9 +208,9 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
     drop(state.handle_ble);
     info!("{} 📱 Removing AA profile", NAME);
     drop(state.handle_aa);
-    // FIXME
-    // info!("{} 🎧 Removing HSP profile", NAME);
-    // drop(state.handle_hsp);
+    info!("{} 🎧 Removing HSP profile", NAME);
+    drop(state.handle_hsp.await??);
+
     state.adapter.set_powered(false).await?;
     info!("{} 💤 Bluetooth adapter powered off", NAME);
 
