@@ -247,6 +247,7 @@ pub async fn bluetooth_setup_connection() -> Result<BluetoothState> {
     send_message(&mut stream, MessageId::WifiInfoResponse, info).await?;
     read_message(&mut stream, MessageId::WifiStartResponse).await?;
     read_message(&mut stream, MessageId::WifiConnectStatus).await?;
+    let _ = stream.shutdown().await?;
 
     info!("{} 🚀 Bluetooth launch sequence completed", NAME);
 
