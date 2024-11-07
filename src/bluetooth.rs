@@ -8,9 +8,11 @@ use bluer::{
 };
 use futures::StreamExt;
 use simplelog::*;
+use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
+use tokio::time::timeout;
 
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protobuf::Message;
@@ -212,8 +214,23 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
     drop(state.handle_agent);
     info!("{} 📱 Removing AA profile", NAME);
     drop(state.handle_aa);
-    info!("{} 🎧 Removing HSP profile", NAME);
-    drop(state.handle_hsp.await??);
+
+    // HSP profile is/was running in own task
+    let retval = state.handle_hsp;
+    match timeout(Duration::from_secs_f32(2.5), retval).await {
+        Ok(task_handle) => match task_handle? {
+            Ok(handle_hsp) => {
+                info!("{} 🎧 Removing HSP profile", NAME);
+                drop(handle_hsp);
+            }
+            Err(e) => {
+                warn!("{} 🎧 HSP profile error: {}", NAME, e);
+            }
+        },
+        Err(e) => {
+            warn!("{} 🎧 Error waiting for HSP profile task: {}", NAME, e);
+        }
+    }
 
     state.adapter.set_powered(false).await?;
     info!("{} 💤 Bluetooth adapter powered off", NAME);
