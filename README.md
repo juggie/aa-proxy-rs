@@ -99,6 +99,7 @@ USAGE:
     aa-proxy-rs [OPTIONS]
 
 OPTIONS:
+    -a, --advertise                   BLE advertising
     -d, --debug                       Enable debug info
     -h, --help                        Print help information
     -l, --logfile <LOGFILE>           Log file path [default: /var/log/aa-proxy-rs.log]

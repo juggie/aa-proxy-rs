@@ -27,6 +27,10 @@ const TCP_SERVER_PORT: i32 = 5288;
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
 struct Args {
+    /// BLE advertising
+    #[clap(short, long)]
+    advertise: bool,
+
     /// Enable debug info
     #[clap(short, long)]
     debug: bool,
@@ -88,7 +92,7 @@ fn logging_init(debug: bool, log_path: &PathBuf) {
     }
 }
 
-async fn tokio_main() {
+async fn tokio_main(advertise: bool) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
@@ -99,7 +103,7 @@ async fn tokio_main() {
     usb.init();
 
     loop {
-        match bluetooth_setup_connection().await {
+        match bluetooth_setup_connection(advertise).await {
             Ok(state) => {
                 // we're ready, gracefully shutdown bluetooth in task
                 tokio::spawn(async move { bluetooth_stop(state).await });
@@ -156,7 +160,7 @@ fn main() {
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    runtime.spawn(async move { tokio_main().await });
+    runtime.spawn(async move { tokio_main(args.advertise).await });
 
     // start tokio_uring runtime simultaneously
     let _ = tokio_uring::start(io_loop(stats_interval));

@@ -51,7 +51,7 @@ enum MessageId {
 
 pub struct BluetoothState {
     adapter: Adapter,
-    handle_ble: AdvertisementHandle,
+    handle_ble: Option<AdvertisementHandle>,
     handle_aa: ProfileHandle,
     handle_hsp: JoinHandle<Result<ProfileHandle>>,
     handle_agent: AgentHandle,
@@ -67,7 +67,7 @@ pub async fn get_cpu_serial_number_suffix() -> Result<String> {
     Ok(serial)
 }
 
-async fn power_up_and_wait_for_connection() -> Result<(BluetoothState, Stream)> {
+async fn power_up_and_wait_for_connection(advertise: bool) -> Result<(BluetoothState, Stream)> {
     // setting BT alias for further use
     let alias = match get_cpu_serial_number_suffix().await {
         Ok(suffix) => format!("{}-{}", BT_ALIAS, suffix),
@@ -87,16 +87,24 @@ async fn power_up_and_wait_for_connection() -> Result<(BluetoothState, Stream)> 
     adapter.set_powered(true).await?;
     adapter.set_pairable(true).await?;
 
-    // Perform a Bluetooth LE advertisement
-    info!("{} 📣 BLE Advertisement started", NAME);
-    let le_advertisement = Advertisement {
-        advertisement_type: bluer::adv::Type::Peripheral,
-        service_uuids: vec![AAWG_PROFILE_UUID.parse()?].into_iter().collect(),
-        discoverable: Some(true),
-        local_name: Some(alias),
-        ..Default::default()
+    let handle_ble = if advertise {
+        // Perform a Bluetooth LE advertisement
+        info!("{} 📣 BLE Advertisement started", NAME);
+        let le_advertisement = Advertisement {
+            advertisement_type: bluer::adv::Type::Peripheral,
+            service_uuids: vec![AAWG_PROFILE_UUID.parse()?].into_iter().collect(),
+            discoverable: Some(true),
+            local_name: Some(alias),
+            ..Default::default()
+        };
+
+        Some(adapter.advertise(le_advertisement).await?)
+    } else {
+        adapter.set_discoverable(true).await?;
+        adapter.set_discoverable_timeout(0).await?;
+
+        None
     };
-    let handle_ble = adapter.advertise(le_advertisement).await?;
 
     // Default agent is probably needed when pairing for the first time
     let agent = Agent::default();
@@ -208,8 +216,10 @@ async fn read_message(stream: &mut Stream, id: MessageId) -> Result<usize> {
 }
 
 pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
-    info!("{} 📣 Removing BLE advertisement", NAME);
-    drop(state.handle_ble);
+    if let Some(handle) = state.handle_ble {
+        info!("{} 📣 Removing BLE advertisement", NAME);
+        drop(handle);
+    }
     info!("{} 🥷 Unregistering default agent", NAME);
     drop(state.handle_agent);
     info!("{} 📱 Removing AA profile", NAME);
@@ -238,11 +248,11 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
     Ok(())
 }
 
-pub async fn bluetooth_setup_connection() -> Result<BluetoothState> {
+pub async fn bluetooth_setup_connection(advertise: bool) -> Result<BluetoothState> {
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
 
-    let (state, mut stream) = power_up_and_wait_for_connection().await?;
+    let (state, mut stream) = power_up_and_wait_for_connection(advertise).await?;
 
     info!("{} 📲 Sending parameters via bluetooth to phone...", NAME);
     let mut start_req = WifiStartRequest::new();
