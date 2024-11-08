@@ -101,6 +101,7 @@ USAGE:
 OPTIONS:
     -a, --advertise                   BLE advertising
     -d, --debug                       Enable debug info
+    -l, --legacy                      Enable legacy mode
     -h, --help                        Print help information
     -l, --logfile <LOGFILE>           Log file path [default: /var/log/aa-proxy-rs.log]
     -s, --stats-interval <SECONDS>    Interval of showing data transfer statistics (0 = disabled)

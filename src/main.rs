@@ -35,6 +35,10 @@ struct Args {
     #[clap(short, long)]
     debug: bool,
 
+    /// Enable legacy mode
+    #[clap(short, long)]
+    legacy: bool,
+
     /// Log file path
     #[clap(
         short,
@@ -92,14 +96,16 @@ fn logging_init(debug: bool, log_path: &PathBuf) {
     }
 }
 
-async fn tokio_main(advertise: bool) {
+async fn tokio_main(advertise: bool, legacy: bool) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
-    // start uevent listener in own task
-    std::thread::spawn(|| uevent_listener(accessory_started_cloned));
+    if legacy {
+        // start uevent listener in own task
+        std::thread::spawn(|| uevent_listener(accessory_started_cloned));
+    }
 
-    let mut usb = UsbGadgetState::new();
+    let mut usb = UsbGadgetState::new(legacy);
     usb.init();
 
     loop {
@@ -160,7 +166,7 @@ fn main() {
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    runtime.spawn(async move { tokio_main(args.advertise).await });
+    runtime.spawn(async move { tokio_main(args.advertise, args.legacy).await });
 
     // start tokio_uring runtime simultaneously
     let _ = tokio_uring::start(io_loop(stats_interval));

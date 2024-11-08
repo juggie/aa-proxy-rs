@@ -48,13 +48,15 @@ pub fn write_data(output_path: &Path, data: &[u8]) -> io::Result<()> {
 pub struct UsbGadgetState {
     configfs_path: PathBuf,
     udc_name: String,
+    legacy: bool,
 }
 
 impl UsbGadgetState {
-    pub fn new() -> UsbGadgetState {
+    pub fn new(legacy: bool) -> UsbGadgetState {
         let mut state = UsbGadgetState {
             configfs_path: PathBuf::from("/sys/kernel/config/usb_gadget"),
             udc_name: String::new(),
+            legacy,
         };
 
         let udc_dir = PathBuf::from("/sys/class/udc");
@@ -75,7 +77,9 @@ impl UsbGadgetState {
 
     pub fn init(&mut self) {
         info!("{} 🔌 Initializing USB Manager", NAME);
-        let _ = self.disable(DEFAULT_GADGET_NAME);
+        if self.legacy {
+            let _ = self.disable(DEFAULT_GADGET_NAME);
+        }
         let _ = self.disable(ACCESSORY_GADGET_NAME);
         info!("{} 🔌 USB Manager: Disabled all USB gadgets", NAME);
     }
@@ -84,31 +88,30 @@ impl UsbGadgetState {
         &mut self,
         accessory_started: Arc<tokio::sync::Notify>,
     ) {
-        for _try in 1..=2 {
-            let _ = self.enable(DEFAULT_GADGET_NAME);
-            info!("{} 🔌 USB Manager: Enabled default gadget", NAME);
+        if self.legacy {
+            for _try in 1..=2 {
+                let _ = self.enable(DEFAULT_GADGET_NAME);
+                info!("{} 🔌 USB Manager: Enabled default gadget", NAME);
 
-            // now waiting for accesory start from uevent thread loop
-            let retval = accessory_started.notified();
-            if let Err(_) = timeout(Duration::from_secs_f32(3.0), retval).await {
-                error!(
+                // now waiting for accesory start from uevent thread loop
+                let retval = accessory_started.notified();
+                if let Err(_) = timeout(Duration::from_secs_f32(3.0), retval).await {
+                    error!(
                     "{} 🔌 USB Manager: Timeout waiting for accessory start, trying to recover...",
                     NAME
                 );
-            } else {
-                break;
-            };
-        }
+                } else {
+                    break;
+                };
+            }
 
-        info!("{} 🔌 USB Manager: Received accessory start request", NAME);
-        let _ = self.disable(DEFAULT_GADGET_NAME);
-        // 0.1 second, keep the gadget disabled for a short time to let the host recognize the change
-        tokio::time::sleep(Duration::from_millis(100)).await;
+            info!("{} 🔌 USB Manager: Received accessory start request", NAME);
+            let _ = self.disable(DEFAULT_GADGET_NAME);
+            // 0.1 second, keep the gadget disabled for a short time to let the host recognize the change
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
         let _ = self.enable(ACCESSORY_GADGET_NAME);
-        info!(
-            "{} 🔌 USB Manager: Switched from default to accessory gadget",
-            NAME
-        );
+        info!("{} 🔌 USB Manager: Switched to accessory gadget", NAME);
     }
 
     fn enable(&mut self, gadget_name: &str) -> io::Result<()> {
