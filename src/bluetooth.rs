@@ -4,7 +4,7 @@ use bluer::{
     adv::AdvertisementHandle,
     agent::{Agent, AgentHandle},
     rfcomm::{Profile, ProfileHandle, Role, Stream},
-    Adapter, Uuid,
+    Adapter, Address, Uuid,
 };
 use futures::StreamExt;
 use simplelog::*;
@@ -68,7 +68,10 @@ pub async fn get_cpu_serial_number_suffix() -> Result<String> {
     Ok(serial)
 }
 
-async fn power_up_and_wait_for_connection(advertise: bool) -> Result<(BluetoothState, Stream)> {
+async fn power_up_and_wait_for_connection(
+    advertise: bool,
+    connect: Option<Address>,
+) -> Result<(BluetoothState, Stream)> {
     // setting BT alias for further use
     let alias = match get_cpu_serial_number_suffix().await {
         Ok(suffix) => format!("{}-{}", BT_ALIAS, suffix),
@@ -137,25 +140,31 @@ async fn power_up_and_wait_for_connection(advertise: bool) -> Result<(BluetoothS
 
     info!("{} ⏳ Waiting for phone to connect via bluetooth...", NAME);
 
-    // try to connect to saved devices
-    let adapter_cloned = adapter.clone();
-    let _: JoinHandle<Result<()>> = tokio::spawn(async move {
-        info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
-        let addresses = adapter_cloned.device_addresses().await?;
-        for addr in addresses {
-            let device = adapter_cloned.device(addr)?;
-            let dev_name = match device.name().await? {
-                Some(name) => format!(" (<b><blue>{}</>)", name),
-                None => String::default(),
+    // try to connect to saved devices or provided one via command line
+    if let Some(address) = connect {
+        let adapter_cloned = adapter.clone();
+        let _: JoinHandle<Result<()>> = tokio::spawn(async move {
+            let addresses = if address == Address::any() {
+                info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
+                adapter_cloned.device_addresses().await?
+            } else {
+                vec![address]
             };
-            info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
-            if let Ok(_) = device.connect_profile(&HSP_AG_UUID).await {
-                info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
-                break;
+            for addr in addresses {
+                let device = adapter_cloned.device(addr)?;
+                let dev_name = match device.name().await? {
+                    Some(name) => format!(" (<b><blue>{}</>)", name),
+                    None => String::default(),
+                };
+                info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
+                if let Ok(_) = device.connect_profile(&HSP_AG_UUID).await {
+                    info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
+                    break;
+                }
             }
-        }
-        Ok(())
-    });
+            Ok(())
+        });
+    }
 
     // handling connection to headset profile in own task
     let task_hsp: JoinHandle<Result<ProfileHandle>> = tokio::spawn(async move {
@@ -269,11 +278,14 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
     Ok(())
 }
 
-pub async fn bluetooth_setup_connection(advertise: bool) -> Result<BluetoothState> {
+pub async fn bluetooth_setup_connection(
+    advertise: bool,
+    connect: Option<Address>,
+) -> Result<BluetoothState> {
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
 
-    let (state, mut stream) = power_up_and_wait_for_connection(advertise).await?;
+    let (state, mut stream) = power_up_and_wait_for_connection(advertise, connect).await?;
 
     info!("{} 📲 Sending parameters via bluetooth to phone...", NAME);
     let mut start_req = WifiStartRequest::new();

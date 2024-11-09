@@ -100,6 +100,8 @@ USAGE:
 
 OPTIONS:
     -a, --advertise                   BLE advertising
+    -c, --connect <CONNECT>           Auto-connect to saved phone or specified phone MAC address if
+                                      provided
     -d, --debug                       Enable debug info
     -l, --legacy                      Enable legacy mode
     -h, --help                        Print help information

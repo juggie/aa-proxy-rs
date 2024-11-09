@@ -2,6 +2,7 @@ mod bluetooth;
 mod io_uring;
 mod usb_gadget;
 
+use bluer::Address;
 use bluetooth::bluetooth_setup_connection;
 use bluetooth::bluetooth_stop;
 use clap::Parser;
@@ -38,6 +39,10 @@ struct Args {
     /// Enable legacy mode
     #[clap(short, long)]
     legacy: bool,
+
+    /// Auto-connect to saved phone or specified phone MAC address if provided
+    #[clap(short, long, default_missing_value("00:00:00:00:00:00"))]
+    connect: Option<Address>,
 
     /// Log file path
     #[clap(
@@ -96,7 +101,7 @@ fn logging_init(debug: bool, log_path: &PathBuf) {
     }
 }
 
-async fn tokio_main(advertise: bool, legacy: bool) {
+async fn tokio_main(advertise: bool, legacy: bool, connect: Option<Address>) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
@@ -111,7 +116,7 @@ async fn tokio_main(advertise: bool, legacy: bool) {
     }
 
     loop {
-        match bluetooth_setup_connection(advertise).await {
+        match bluetooth_setup_connection(advertise, connect).await {
             Ok(state) => {
                 // we're ready, gracefully shutdown bluetooth in task
                 tokio::spawn(async move { bluetooth_stop(state).await });
@@ -168,7 +173,7 @@ fn main() {
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    runtime.spawn(async move { tokio_main(args.advertise, args.legacy).await });
+    runtime.spawn(async move { tokio_main(args.advertise, args.legacy, args.connect).await });
 
     // start tokio_uring runtime simultaneously
     let _ = tokio_uring::start(io_loop(stats_interval));
