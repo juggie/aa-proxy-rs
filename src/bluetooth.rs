@@ -157,9 +157,12 @@ async fn power_up_and_wait_for_connection(
                     _ => String::default(),
                 };
                 info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
-                if let Ok(_) = device.connect_profile(&HSP_AG_UUID).await {
-                    info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
-                    break;
+                match device.connect_profile(&HSP_AG_UUID).await {
+                    Ok(_) => {
+                        info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
+                        break;
+                    }
+                    Err(e) => warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e),
                 }
             }
             Ok(())
