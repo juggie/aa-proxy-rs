@@ -146,3 +146,4 @@ I didn't go further investigating this problem, only noticing.
 - https://github.com/openDsh/openauto
 - https://github.com/qhuyduong/AAGateway
 - https://github.com/Demon000/web-auto
+- https://github.com/f1xpl/openauto
