@@ -54,7 +54,7 @@ struct Args {
     logfile: PathBuf,
 
     /// Interval of showing data transfer statistics (0 = disabled)
-    #[clap(short, long, value_name = "SECONDS", default_value = "0")]
+    #[clap(short, long, value_name = "SECONDS", default_value_t = 0)]
     stats_interval: u16,
 }
 
