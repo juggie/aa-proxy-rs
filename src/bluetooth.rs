@@ -4,7 +4,7 @@ use bluer::{
     adv::AdvertisementHandle,
     agent::{Agent, AgentHandle},
     rfcomm::{Profile, ProfileHandle, Role, Stream},
-    Adapter,
+    Adapter, Uuid,
 };
 use futures::StreamExt;
 use simplelog::*;
@@ -29,6 +29,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 const AAWG_PROFILE_UUID: &str = "4de17a00-52cb-11e6-bdf4-0800200c9a66";
 const HSP_HS_UUID: &str = "00001108-0000-1000-8000-00805f9b34fb";
+const HSP_AG_UUID: Uuid = Uuid::from_u128(0x0000111200001000800000805f9b34fb);
 const BT_ALIAS: &str = "WirelessAADongle";
 
 const WLAN_IFACE: &str = "wlan0";
@@ -135,6 +136,26 @@ async fn power_up_and_wait_for_connection(advertise: bool) -> Result<(BluetoothS
     info!("{} 🎧 Headset Profile (HSP): registered", NAME);
 
     info!("{} ⏳ Waiting for phone to connect via bluetooth...", NAME);
+
+    // try to connect to saved devices
+    let adapter_cloned = adapter.clone();
+    let _: JoinHandle<Result<()>> = tokio::spawn(async move {
+        info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
+        let addresses = adapter_cloned.device_addresses().await?;
+        for addr in addresses {
+            let device = adapter_cloned.device(addr)?;
+            let dev_name = match device.name().await? {
+                Some(name) => format!(" (<b><blue>{}</>)", name),
+                None => String::default(),
+            };
+            info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
+            if let Ok(_) = device.connect_profile(&HSP_AG_UUID).await {
+                info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
+                break;
+            }
+        }
+        Ok(())
+    });
 
     // handling connection to headset profile in own task
     let task_hsp: JoinHandle<Result<ProfileHandle>> = tokio::spawn(async move {
