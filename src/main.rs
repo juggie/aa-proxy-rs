@@ -106,7 +106,9 @@ async fn tokio_main(advertise: bool, legacy: bool) {
     }
 
     let mut usb = UsbGadgetState::new(legacy);
-    usb.init();
+    if let Err(e) = usb.init() {
+        error!("{} 🔌 USB init error: {}", NAME, e);
+    }
 
     loop {
         match bluetooth_setup_connection(advertise).await {

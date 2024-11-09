@@ -15,6 +15,10 @@ use tokio::time::timeout;
 // module name for logging engine
 const NAME: &str = "<i><bright-black> usb: </>";
 
+// Just a generic Result type to ease error handling for us. Errors in multithreaded
+// async contexts needs some extra restrictions
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
 pub const DEFAULT_GADGET_NAME: &str = "default";
 pub const ACCESSORY_GADGET_NAME: &str = "accessory";
 
@@ -75,13 +79,15 @@ impl UsbGadgetState {
         return state;
     }
 
-    pub fn init(&mut self) {
+    pub fn init(&mut self) -> Result<()> {
         info!("{} 🔌 Initializing USB Manager", NAME);
         if self.legacy {
-            let _ = self.disable(DEFAULT_GADGET_NAME);
+            self.disable(DEFAULT_GADGET_NAME)?;
         }
-        let _ = self.disable(ACCESSORY_GADGET_NAME);
+        self.disable(ACCESSORY_GADGET_NAME)?;
         info!("{} 🔌 USB Manager: Disabled all USB gadgets", NAME);
+
+        Ok(())
     }
 
     pub async fn enable_default_and_wait_for_accessory(
