@@ -152,9 +152,9 @@ async fn power_up_and_wait_for_connection(
             };
             for addr in addresses {
                 let device = adapter_cloned.device(addr)?;
-                let dev_name = match device.name().await? {
-                    Some(name) => format!(" (<b><blue>{}</>)", name),
-                    None => String::default(),
+                let dev_name = match device.name().await {
+                    Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
+                    _ => String::default(),
                 };
                 info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
                 if let Ok(_) = device.connect_profile(&HSP_AG_UUID).await {
