@@ -27,8 +27,8 @@ const NAME: &str = "<i><bright-black> bluetooth: </>";
 // async contexts needs some extra restrictions
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-const AAWG_PROFILE_UUID: &str = "4de17a00-52cb-11e6-bdf4-0800200c9a66";
-const HSP_HS_UUID: &str = "00001108-0000-1000-8000-00805f9b34fb";
+const AAWG_PROFILE_UUID: Uuid = Uuid::from_u128(0x4de17a0052cb11e6bdf40800200c9a66);
+const HSP_HS_UUID: Uuid = Uuid::from_u128(0x0000110800001000800000805f9b34fb);
 const HSP_AG_UUID: Uuid = Uuid::from_u128(0x0000111200001000800000805f9b34fb);
 const BT_ALIAS: &str = "WirelessAADongle";
 
@@ -96,7 +96,7 @@ async fn power_up_and_wait_for_connection(
         info!("{} 📣 BLE Advertisement started", NAME);
         let le_advertisement = Advertisement {
             advertisement_type: bluer::adv::Type::Peripheral,
-            service_uuids: vec![AAWG_PROFILE_UUID.parse()?].into_iter().collect(),
+            service_uuids: vec![AAWG_PROFILE_UUID].into_iter().collect(),
             discoverable: Some(true),
             local_name: Some(alias),
             ..Default::default()
@@ -116,7 +116,7 @@ async fn power_up_and_wait_for_connection(
 
     // AA Wireless profile
     let profile = Profile {
-        uuid: AAWG_PROFILE_UUID.parse()?,
+        uuid: AAWG_PROFILE_UUID,
         name: Some("AA Wireless".to_string()),
         channel: Some(8),
         role: Some(Role::Server),
@@ -129,7 +129,7 @@ async fn power_up_and_wait_for_connection(
 
     // Headset profile
     let profile = Profile {
-        uuid: HSP_HS_UUID.parse()?,
+        uuid: HSP_HS_UUID,
         name: Some("HSP HS".to_string()),
         require_authentication: Some(false),
         require_authorization: Some(false),
