@@ -101,7 +101,12 @@ fn logging_init(debug: bool, log_path: &PathBuf) {
     }
 }
 
-async fn tokio_main(advertise: bool, legacy: bool, connect: Option<Address>) {
+async fn tokio_main(
+    advertise: bool,
+    legacy: bool,
+    connect: Option<Address>,
+    need_restart: Arc<Notify>,
+) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
@@ -111,30 +116,33 @@ async fn tokio_main(advertise: bool, legacy: bool, connect: Option<Address>) {
     }
 
     let mut usb = UsbGadgetState::new(legacy);
-    if let Err(e) = usb.init() {
-        error!("{} 🔌 USB init error: {}", NAME, e);
-    }
-
     loop {
-        match bluetooth_setup_connection(advertise, connect).await {
-            Ok(state) => {
-                // we're ready, gracefully shutdown bluetooth in task
-                tokio::spawn(async move { bluetooth_stop(state).await });
-                break;
-            }
-            Err(e) => {
-                error!("{} Bluetooth error: {}", NAME, e);
-                info!("{} Trying to recover...", NAME);
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        if let Err(e) = usb.init() {
+            error!("{} 🔌 USB init error: {}", NAME, e);
+        }
+
+        loop {
+            match bluetooth_setup_connection(advertise, connect).await {
+                Ok(state) => {
+                    // we're ready, gracefully shutdown bluetooth in task
+                    tokio::spawn(async move { bluetooth_stop(state).await });
+                    break;
+                }
+                Err(e) => {
+                    error!("{} Bluetooth error: {}", NAME, e);
+                    info!("{} Trying to recover...", NAME);
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
             }
         }
-    }
 
-    usb.enable_default_and_wait_for_accessory(accessory_started)
-        .await;
+        usb.enable_default_and_wait_for_accessory(accessory_started.clone())
+            .await;
 
-    // TODO: make proper main loop with cancelation
-    loop {
+        // wait for restart
+        need_restart.notified().await;
+
+        // TODO: make proper main loop with cancelation
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 }
@@ -171,10 +179,16 @@ fn main() {
         }
     );
 
+    // notify for syncing threads
+    let need_restart = Arc::new(Notify::new());
+    let need_restart_cloned = need_restart.clone();
+
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    runtime.spawn(async move { tokio_main(args.advertise, args.legacy, args.connect).await });
+    runtime.spawn(async move {
+        tokio_main(args.advertise, args.legacy, args.connect, need_restart).await
+    });
 
     // start tokio_uring runtime simultaneously
-    let _ = tokio_uring::start(io_loop(stats_interval));
+    let _ = tokio_uring::start(io_loop(stats_interval, need_restart_cloned));
 }

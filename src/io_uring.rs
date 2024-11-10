@@ -2,7 +2,9 @@ use crate::TCP_SERVER_PORT;
 use bytesize::ByteSize;
 use simplelog::*;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::Notify;
 use tokio_uring::buf::BoundedBuf;
 
 // module name for logging engine
@@ -143,7 +145,10 @@ async fn copy_stream_to_file(
     }
 }
 
-pub async fn io_loop(stats_interval: Option<Duration>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn io_loop(
+    stats_interval: Option<Duration>,
+    need_restart: Arc<Notify>,
+) -> Result<(), Box<dyn std::error::Error>> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
     let listener = tokio_uring::net::TcpListener::bind(bind_addr).unwrap();
@@ -208,5 +213,8 @@ pub async fn io_loop(stats_interval: Option<Duration>) -> Result<(), Box<dyn std
         // for each direction)
         from_file.abort();
         from_stream.abort();
+
+        // stream(s) closed, notify main loop to restart
+        need_restart.notify_one();
     }
 }
