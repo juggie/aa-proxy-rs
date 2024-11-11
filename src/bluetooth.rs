@@ -141,33 +141,39 @@ async fn power_up_and_wait_for_connection(
     info!("{} ⏳ Waiting for phone to connect via bluetooth...", NAME);
 
     // try to connect to saved devices or provided one via command line
-    if let Some(address) = connect {
-        let adapter_cloned = adapter.clone();
-        let _: JoinHandle<Result<()>> = tokio::spawn(async move {
-            let addresses = if address == Address::any() {
-                info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
-                adapter_cloned.device_addresses().await?
-            } else {
-                vec![address]
-            };
-            for addr in addresses {
-                let device = adapter_cloned.device(addr)?;
-                let dev_name = match device.name().await {
-                    Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
-                    _ => String::default(),
+    let connect_task: Option<JoinHandle<Result<()>>> = match connect {
+        Some(address) => {
+            let adapter_cloned = adapter.clone();
+
+            Some(tokio::spawn(async move {
+                let addresses = if address == Address::any() {
+                    info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
+                    adapter_cloned.device_addresses().await?
+                } else {
+                    vec![address]
                 };
-                info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
-                match device.connect_profile(&HSP_AG_UUID).await {
-                    Ok(_) => {
-                        info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
-                        break;
+                for addr in addresses {
+                    let device = adapter_cloned.device(addr)?;
+                    let dev_name = match device.name().await {
+                        Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
+                        _ => String::default(),
+                    };
+                    info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
+                    match device.connect_profile(&HSP_AG_UUID).await {
+                        Ok(_) => {
+                            info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
+                            break;
+                        }
+                        Err(e) => {
+                            warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e)
+                        }
                     }
-                    Err(e) => warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e),
                 }
-            }
-            Ok(())
-        });
-    }
+                Ok(())
+            }))
+        }
+        None => None,
+    };
 
     // handling connection to headset profile in own task
     let task_hsp: JoinHandle<Result<ProfileHandle>> = tokio::spawn(async move {
@@ -192,6 +198,11 @@ async fn power_up_and_wait_for_connection(
         req.device()
     );
     let stream = req.accept()?;
+
+    // we have a connection from phone, stop connect_task
+    if let Some(task) = connect_task {
+        task.abort();
+    }
 
     // generate structure with adapter and handlers for graceful shutdown later
     let state = BluetoothState {
