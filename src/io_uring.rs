@@ -118,7 +118,8 @@ async fn copy_stream_to_file(
         // it back, _even if there was an error_. There's a whole trait for that,
         // which `Vec<u8>` implements!
         debug!("TCP: before read");
-        let (res, buf_read) = from.read(buf).await;
+        let retval = from.read(buf);
+        let (res, buf_read) = timeout(Duration::from_secs(5), retval).await?;
         // Propagate errors, see how many bytes we read
         let n = res?;
         debug!("TCP: after read, {} bytes", n);
