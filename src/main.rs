@@ -143,6 +143,7 @@ async fn tokio_main(
         need_restart.notified().await;
 
         // TODO: make proper main loop with cancelation
+        info!("{} 📵 TCP/USB connection closed, trying again...", NAME);
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 }
