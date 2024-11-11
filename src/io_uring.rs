@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
+use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
 
 // module name for logging engine
@@ -50,7 +51,8 @@ async fn copy_file_to_stream(
         // it back, _even if there was an error_. There's a whole trait for that,
         // which `Vec<u8>` implements!
         debug!("USB: before read");
-        let (res, buf_read) = from.read_at(buf, 0).await;
+        let retval = from.read_at(buf, 0);
+        let (res, buf_read) = timeout(Duration::from_secs(5), retval).await?;
         // Propagate errors, see how many bytes we read
         let n = res?;
         debug!("USB: after read, {} bytes", n);
