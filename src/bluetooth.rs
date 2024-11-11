@@ -152,6 +152,10 @@ async fn power_up_and_wait_for_connection(
                 } else {
                     vec![address]
                 };
+                // exit if we don't have anything to connect to
+                if addresses.is_empty() {
+                    return Ok(());
+                }
                 loop {
                     for addr in &addresses {
                         let device = adapter_cloned.device(*addr)?;
