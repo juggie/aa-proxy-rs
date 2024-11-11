@@ -152,24 +152,25 @@ async fn power_up_and_wait_for_connection(
                 } else {
                     vec![address]
                 };
-                for addr in addresses {
-                    let device = adapter_cloned.device(addr)?;
-                    let dev_name = match device.name().await {
-                        Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
-                        _ => String::default(),
-                    };
-                    info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
-                    match device.connect_profile(&HSP_AG_UUID).await {
-                        Ok(_) => {
-                            info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
-                            break;
-                        }
-                        Err(e) => {
-                            warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e)
+                loop {
+                    for addr in &addresses {
+                        let device = adapter_cloned.device(*addr)?;
+                        let dev_name = match device.name().await {
+                            Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
+                            _ => String::default(),
+                        };
+                        info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
+                        match device.connect_profile(&HSP_AG_UUID).await {
+                            Ok(_) => {
+                                info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
+                                break;
+                            }
+                            Err(e) => {
+                                warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e)
+                            }
                         }
                     }
                 }
-                Ok(())
             }))
         }
         None => None,
