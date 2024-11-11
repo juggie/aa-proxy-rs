@@ -13,6 +13,7 @@ const NAME: &str = "<i><bright-black> proxy: </>";
 
 const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 const BUFFER_LEN: usize = 16 * 1024;
+const READ_TIMEOUT: Duration = Duration::new(5, 0);
 
 async fn copy_file_to_stream(
     from: Rc<tokio_uring::fs::File>,
@@ -52,7 +53,7 @@ async fn copy_file_to_stream(
         // which `Vec<u8>` implements!
         debug!("USB: before read");
         let retval = from.read_at(buf, 0);
-        let (res, buf_read) = timeout(Duration::from_secs(5), retval).await?;
+        let (res, buf_read) = timeout(READ_TIMEOUT, retval).await?;
         // Propagate errors, see how many bytes we read
         let n = res?;
         debug!("USB: after read, {} bytes", n);
@@ -119,7 +120,7 @@ async fn copy_stream_to_file(
         // which `Vec<u8>` implements!
         debug!("TCP: before read");
         let retval = from.read(buf);
-        let (res, buf_read) = timeout(Duration::from_secs(5), retval).await?;
+        let (res, buf_read) = timeout(READ_TIMEOUT, retval).await?;
         // Propagate errors, see how many bytes we read
         let n = res?;
         debug!("TCP: after read, {} bytes", n);
