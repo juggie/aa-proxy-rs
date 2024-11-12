@@ -167,7 +167,7 @@ async fn power_up_and_wait_for_connection(
                         match device.connect_profile(&HSP_AG_UUID).await {
                             Ok(_) => {
                                 info!("{} 🔗 Device {}{} connected", NAME, addr, dev_name);
-                                break;
+                                return Ok(());
                             }
                             Err(e) => {
                                 warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e)
