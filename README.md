@@ -36,8 +36,9 @@ Config parameters from `/etc/aawgd.env` are not (yet?) supported.
 
 ## Current stage and plans
 This project is on early stage of development:
-The tool is currently working fine for me from Raspberry Pi boot up to initial phone connection. It is then working stable until the phone goes out of range.
-There is left a lot of work to make it more stable and reliable, especially I am planning to add reconnecting/recovering code where it is applicable.
+~~The tool is currently working fine for me from Raspberry Pi boot up to initial phone connection. It is then working stable until the phone goes out of range.
+There is left a lot of work to make it more stable and reliable, especially I am planning to add reconnecting/recovering code where it is applicable.~~<br>
+UPDATE: reconnecting code is now in place and working quite nice! :)
 
 ## How it works (technical)
 ![Hardware overview](images/aa-proxy-rs.webp)
