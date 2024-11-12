@@ -12,6 +12,7 @@ use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
+use tokio::time::sleep;
 use tokio::time::timeout;
 
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -174,6 +175,7 @@ async fn power_up_and_wait_for_connection(
                             }
                         }
                     }
+                    sleep(Duration::from_secs(1)).await;
                 }
             }))
         }
