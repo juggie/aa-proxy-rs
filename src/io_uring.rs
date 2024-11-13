@@ -14,6 +14,7 @@ const NAME: &str = "<i><bright-black> proxy: </>";
 const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 const BUFFER_LEN: usize = 16 * 1024;
 const READ_TIMEOUT: Duration = Duration::new(5, 0);
+const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
 async fn copy_file_to_stream(
     from: Rc<tokio_uring::fs::File>,
@@ -152,6 +153,7 @@ async fn copy_stream_to_file(
 pub async fn io_loop(
     stats_interval: Option<Duration>,
     need_restart: Arc<Notify>,
+    tcp_start: Arc<Notify>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
@@ -161,8 +163,23 @@ pub async fn io_loop(
         NAME, bind_addr
     );
     loop {
+        // wait for bluetooth handshake
+        tcp_start.notified().await;
+
         // Asynchronously wait for an inbound TCP connection
-        let (stream, addr) = listener.accept().await?;
+        let retval = listener.accept();
+        let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval).await? {
+            Ok((stream, addr)) => (stream, addr),
+            Err(_) => {
+                error!(
+                    "{} 📵 TCP server: timed out waiting for phone connection, restarting...",
+                    NAME
+                );
+                // notify main loop to restart
+                need_restart.notify_one();
+                continue;
+            }
+        };
         info!(
             "{} 📳 TCP server: new client connected: <b>{:?}</b>",
             NAME, addr

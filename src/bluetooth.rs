@@ -8,9 +8,11 @@ use bluer::{
 };
 use futures::StreamExt;
 use simplelog::*;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::time::timeout;
@@ -302,6 +304,7 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
 pub async fn bluetooth_setup_connection(
     advertise: bool,
     connect: Option<Address>,
+    tcp_start: Arc<Notify>,
 ) -> Result<BluetoothState> {
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
@@ -326,6 +329,7 @@ pub async fn bluetooth_setup_connection(
     info.set_security_mode(SecurityMode::WPA2_PERSONAL);
     info.set_access_point_type(AccessPointType::DYNAMIC);
     send_message(&mut stream, MessageId::WifiInfoResponse, info).await?;
+    tcp_start.notify_one();
     read_message(&mut stream, MessageId::WifiStartResponse).await?;
     read_message(&mut stream, MessageId::WifiConnectStatus).await?;
     let _ = stream.shutdown().await?;

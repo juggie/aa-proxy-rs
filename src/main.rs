@@ -106,6 +106,7 @@ async fn tokio_main(
     legacy: bool,
     connect: Option<Address>,
     need_restart: Arc<Notify>,
+    tcp_start: Arc<Notify>,
 ) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
@@ -122,7 +123,7 @@ async fn tokio_main(
         }
 
         loop {
-            match bluetooth_setup_connection(advertise, connect).await {
+            match bluetooth_setup_connection(advertise, connect, tcp_start.clone()).await {
                 Ok(state) => {
                     // we're ready, gracefully shutdown bluetooth in task
                     tokio::spawn(async move { bluetooth_stop(state).await });
@@ -143,7 +144,10 @@ async fn tokio_main(
         need_restart.notified().await;
 
         // TODO: make proper main loop with cancelation
-        info!("{} 📵 TCP/USB connection closed, trying again...", NAME);
+        info!(
+            "{} 📵 TCP/USB connection closed or not started, trying again...",
+            NAME
+        );
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 }
@@ -183,13 +187,26 @@ fn main() {
     // notify for syncing threads
     let need_restart = Arc::new(Notify::new());
     let need_restart_cloned = need_restart.clone();
+    let tcp_start = Arc::new(Notify::new());
+    let tcp_start_cloned = tcp_start.clone();
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
     runtime.spawn(async move {
-        tokio_main(args.advertise, args.legacy, args.connect, need_restart).await
+        tokio_main(
+            args.advertise,
+            args.legacy,
+            args.connect,
+            need_restart,
+            tcp_start,
+        )
+        .await
     });
 
     // start tokio_uring runtime simultaneously
-    let _ = tokio_uring::start(io_loop(stats_interval, need_restart_cloned));
+    let _ = tokio_uring::start(io_loop(
+        stats_interval,
+        need_restart_cloned,
+        tcp_start_cloned,
+    ));
 }
