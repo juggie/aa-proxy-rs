@@ -120,6 +120,14 @@ impl UsbGadgetState {
         info!("{} 🔌 USB Manager: Switched to accessory gadget", NAME);
     }
 
+    fn attached(gadget_path: &PathBuf) -> io::Result<Option<String>> {
+        let udc = std::fs::read_to_string(gadget_path)?.trim_end().to_owned();
+        if udc.len() != 0 {
+            return Ok(Some(udc));
+        }
+        return Ok(None);
+    }
+
     fn enable(&mut self, gadget_name: &str) -> io::Result<()> {
         if !self.configfs_path.exists() {
             return Err(io::Error::new(
@@ -128,8 +136,10 @@ impl UsbGadgetState {
             ));
         }
 
-        let gadget_path = self.configfs_path.join(gadget_name);
-        write_data(gadget_path.join("UDC").as_path(), self.udc_name.as_bytes())?;
+        let gadget_path = self.configfs_path.join(gadget_name).join("UDC");
+        if let None = Self::attached(&gadget_path)? {
+            write_data(gadget_path.as_path(), self.udc_name.as_bytes())?;
+        }
 
         Ok(())
     }
@@ -142,8 +152,10 @@ impl UsbGadgetState {
             ));
         }
 
-        let gadget_path = self.configfs_path.join(gadget_name);
-        write_data(gadget_path.join("UDC").as_path(), "\n".as_bytes())?;
+        let gadget_path = self.configfs_path.join(gadget_name).join("UDC");
+        if let Some(_) = Self::attached(&gadget_path)? {
+            write_data(gadget_path.as_path(), "\n".as_bytes())?;
+        }
 
         Ok(())
     }
