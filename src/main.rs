@@ -123,11 +123,12 @@ async fn tokio_main(
             error!("{} 🔌 USB init error: {}", NAME, e);
         }
 
+        let bt_stop;
         loop {
             match bluetooth_setup_connection(advertise, connect, tcp_start.clone()).await {
                 Ok(state) => {
                     // we're ready, gracefully shutdown bluetooth in task
-                    tokio::spawn(async move { bluetooth_stop(state).await });
+                    bt_stop = tokio::spawn(async move { bluetooth_stop(state).await });
                     break;
                 }
                 Err(e) => {
@@ -140,6 +141,9 @@ async fn tokio_main(
 
         usb.enable_default_and_wait_for_accessory(accessory_started.clone())
             .await;
+
+        // wait for bluetooth stop properly
+        let _ = bt_stop.await;
 
         // wait for restart
         need_restart.notified().await;
