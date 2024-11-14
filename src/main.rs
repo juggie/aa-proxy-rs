@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Builder;
 use tokio::sync::Notify;
+use tokio::time::Instant;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> main: </>";
@@ -153,6 +154,7 @@ async fn tokio_main(
 }
 
 fn main() {
+    let started = Instant::now();
     let args = Args::parse();
     logging_init(args.debug, &args.logfile);
 
@@ -209,4 +211,9 @@ fn main() {
         need_restart_cloned,
         tcp_start_cloned,
     ));
+
+    info!(
+        "🚩 aa-proxy-rs terminated, running time: {}",
+        format_duration(started.elapsed()).to_string()
+    );
 }
