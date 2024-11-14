@@ -7,6 +7,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
+use tokio_uring::buf::BoundedBufMut;
+use tokio_uring::BufResult;
+use tokio_uring::UnsubmittedWrite;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> proxy: </>";
@@ -15,6 +18,109 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 const BUFFER_LEN: usize = 16 * 1024;
 const READ_TIMEOUT: Duration = Duration::new(5, 0);
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
+
+// tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
+// read and write calls:
+// File is using read_at() and write_at(),
+// TcpStream is using read() and write()
+//
+// In our case we are reading a special unix character device for
+// the USB gadget, which is not a regular file where an offset is important.
+// We just use offset 0 for reading and writing, so below is a trait
+// for this, to be able to use it in a generic copy() function below.
+
+pub trait Endpoint<E> {
+    async fn read<T: BoundedBufMut>(&self, buf: T) -> BufResult<usize, T>;
+    fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T>;
+}
+
+impl Endpoint<tokio_uring::fs::File> for tokio_uring::fs::File {
+    async fn read<T: BoundedBufMut>(&self, buf: T) -> BufResult<usize, T> {
+        self.read_at(buf, 0).await
+    }
+    fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T> {
+        self.write_at(buf, 0)
+    }
+}
+
+impl Endpoint<tokio_uring::net::TcpStream> for tokio_uring::net::TcpStream {
+    async fn read<T: BoundedBufMut>(&self, buf: T) -> BufResult<usize, T> {
+        self.read(buf).await
+    }
+    fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T> {
+        self.write(buf)
+    }
+}
+
+async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
+    from: Rc<A>,
+    to: Rc<B>,
+    dbg_name: &'static str,
+    direction: &'static str,
+    stats_interval: Option<Duration>,
+) -> Result<(), std::io::Error> {
+    // For statistics
+    let mut bytes_out: usize = 0;
+    let mut bytes_out_last: usize = 0;
+    let mut report_time = Instant::now();
+
+    let mut buf = vec![0u8; BUFFER_LEN];
+    loop {
+        // Handle stats printing
+        if stats_interval.is_some() && report_time.elapsed() > stats_interval.unwrap() {
+            let transferred_total = ByteSize::b(bytes_out.try_into().unwrap());
+            let transferred_last = ByteSize::b(bytes_out_last.try_into().unwrap());
+
+            let speed: u64 =
+                (bytes_out_last as f64 / report_time.elapsed().as_secs_f64()).round() as u64;
+            let speed = ByteSize::b(speed);
+
+            info!(
+                "{} {} transfer: {:#} ({:#}/s), {:#} total",
+                NAME,
+                direction,
+                transferred_last.to_string_as(true),
+                speed.to_string_as(true),
+                transferred_total.to_string_as(true),
+            );
+
+            report_time = Instant::now();
+            bytes_out_last = 0;
+        }
+
+        // things look weird: we pass ownership of the buffer to `read`, and we get
+        // it back, _even if there was an error_. There's a whole trait for that,
+        // which `Vec<u8>` implements!
+        debug!("{}: before read", dbg_name);
+        let retval = from.read(buf);
+        let (res, buf_read) = timeout(READ_TIMEOUT, retval).await?;
+        // Propagate errors, see how many bytes we read
+        let n = res?;
+        debug!("{}: after read, {} bytes", dbg_name, n);
+        if n == 0 {
+            // A read of size zero signals EOF (end of file), finish gracefully
+            return Ok(());
+        }
+
+        // The `slice` method here is implemented in an extension trait: it
+        // returns an owned slice of our `Vec<u8>`, which we later turn back
+        // into the full `Vec<u8>`
+        debug!("{}: before write", dbg_name);
+        let (res, buf_write) = to.write(buf_read.slice(..n)).submit().await;
+        let n = res?;
+        debug!("{}: after write, {} bytes", dbg_name, n);
+        // Increment byte counters for statistics
+        if stats_interval.is_some() {
+            bytes_out += n;
+            bytes_out_last += n;
+        }
+
+        // Later is now, we want our full buffer back.
+        // That's why we declared our binding `mut` way back at the start of `copy`,
+        // even though we moved it into the very first `TcpStream::read` call.
+        buf = buf_write.into_inner();
+    }
+}
 
 async fn copy_file_to_stream(
     from: Rc<tokio_uring::fs::File>,
