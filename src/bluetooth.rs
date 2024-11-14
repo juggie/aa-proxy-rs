@@ -40,7 +40,7 @@ const WLAN_IP_ADDR: &str = "10.0.0.1";
 const WLAN_SSID: &str = "AAWirelessDongle";
 const WLAN_WPA_KEY: &str = "ConnectAAWirelessDongle";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[repr(u16)]
 #[allow(unused)]
 enum MessageId {
@@ -262,7 +262,18 @@ async fn read_message(stream: &mut Stream, id: MessageId) -> Result<usize> {
     // read and discard the remaining bytes
     if len > 0 {
         let mut buf = vec![0; len];
-        stream.read_exact(&mut buf).await?;
+        let n = stream.read_exact(&mut buf).await?;
+
+        // analyzing WifiConnectStatus
+        // this is a frame where phone cannot connect to WiFi:
+        // [08, FD, FF, FF, FF, FF, FF, FF, FF, FF, 01] -> which is -i64::MAX
+        // and this is where all is fine:
+        // [08, 00]
+        if id == MessageId::WifiConnectStatus && n >= 2 {
+            if buf[1] != 0 {
+                return Err("phone cannot connect to our WiFi AP...".into());
+            }
+        }
     }
 
     Ok(HEADER_LEN + len)
