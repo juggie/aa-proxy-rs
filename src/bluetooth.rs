@@ -329,9 +329,9 @@ pub async fn bluetooth_setup_connection(
     info.set_security_mode(SecurityMode::WPA2_PERSONAL);
     info.set_access_point_type(AccessPointType::DYNAMIC);
     send_message(&mut stream, MessageId::WifiInfoResponse, info).await?;
-    tcp_start.notify_one();
     read_message(&mut stream, MessageId::WifiStartResponse).await?;
     read_message(&mut stream, MessageId::WifiConnectStatus).await?;
+    tcp_start.notify_one();
     let _ = stream.shutdown().await?;
 
     info!("{} 🚀 Bluetooth launch sequence completed", NAME);
