@@ -263,6 +263,7 @@ async fn read_message(stream: &mut Stream, id: MessageId) -> Result<usize> {
     if len > 0 {
         let mut buf = vec![0; len];
         let n = stream.read_exact(&mut buf).await?;
+        debug!("remaining {} bytes: {:02X?}", n, buf);
 
         // analyzing WifiConnectStatus
         // this is a frame where phone cannot connect to WiFi:
