@@ -168,13 +168,13 @@ pub async fn io_loop(
 
         // Asynchronously wait for an inbound TCP connection
         let retval = listener.accept();
-        let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval).await? {
-            Ok((stream, addr)) => (stream, addr),
-            Err(_) => {
-                error!(
-                    "{} 📵 TCP server: timed out waiting for phone connection, restarting...",
-                    NAME
-                );
+        let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
+            .await
+            .map_err(|e| std::io::Error::other(e))
+        {
+            Ok(Ok((stream, addr))) => (stream, addr),
+            Err(e) | Ok(Err(e)) => {
+                error!("{} 📵 TCP server: {}, restarting...", NAME, e);
                 // notify main loop to restart
                 need_restart.notify_one();
                 continue;
