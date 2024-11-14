@@ -158,15 +158,13 @@ pub async fn io_loop(
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
     let listener = tokio_uring::net::TcpListener::bind(bind_addr).unwrap();
-    info!(
-        "{} 🛰️ TCP server now listening on: <u>{}</u>",
-        NAME, bind_addr
-    );
+    info!("{} 🛰️ TCP server bound to: <u>{}</u>", NAME, bind_addr);
     loop {
-        // wait for bluetooth handshake
+        info!("{} 💤 waiting for bluetooth handshake...", NAME);
         tcp_start.notified().await;
 
         // Asynchronously wait for an inbound TCP connection
+        info!("{} 🛰️ TCP server: listening for phone connection...", NAME);
         let retval = listener.accept();
         let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
             .await
