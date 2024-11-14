@@ -244,7 +244,7 @@ async fn send_message(stream: &mut Stream, id: MessageId, message: impl Message)
 async fn read_message(stream: &mut Stream, id: MessageId) -> Result<usize> {
     let mut buf = vec![0; HEADER_LEN];
     let n = stream.read_exact(&mut buf).await?;
-    debug!("received {} bytes: {:X?}", n, buf);
+    debug!("received {} bytes: {:02X?}", n, buf);
 
     let len: usize = u16::from_be_bytes(buf[0..=1].try_into()?).into();
     let message_id = u16::from_be_bytes(buf[2..=3].try_into()?);
