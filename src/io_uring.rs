@@ -122,140 +122,6 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
     }
 }
 
-async fn copy_file_to_stream(
-    from: Rc<tokio_uring::fs::File>,
-    to: Rc<tokio_uring::net::TcpStream>,
-    stats_interval: Option<Duration>,
-) -> Result<(), std::io::Error> {
-    // For statistics
-    let mut bytes_out: usize = 0;
-    let mut bytes_out_last: usize = 0;
-    let mut report_time = Instant::now();
-
-    let mut buf = vec![0u8; BUFFER_LEN];
-    loop {
-        // Handle stats printing
-        if stats_interval.is_some() && report_time.elapsed() > stats_interval.unwrap() {
-            let transferred_total = ByteSize::b(bytes_out.try_into().unwrap());
-            let transferred_last = ByteSize::b(bytes_out_last.try_into().unwrap());
-
-            let speed: u64 =
-                (bytes_out_last as f64 / report_time.elapsed().as_secs_f64()).round() as u64;
-            let speed = ByteSize::b(speed);
-
-            info!(
-                "{} 📲 car to phone transfer: {:#} ({:#}/s), {:#} total",
-                NAME,
-                transferred_last.to_string_as(true),
-                speed.to_string_as(true),
-                transferred_total.to_string_as(true),
-            );
-
-            report_time = Instant::now();
-            bytes_out_last = 0;
-        }
-
-        // things look weird: we pass ownership of the buffer to `read`, and we get
-        // it back, _even if there was an error_. There's a whole trait for that,
-        // which `Vec<u8>` implements!
-        debug!("USB: before read");
-        let retval = from.read_at(buf, 0);
-        let (res, buf_read) = timeout(READ_TIMEOUT, retval).await?;
-        // Propagate errors, see how many bytes we read
-        let n = res?;
-        debug!("USB: after read, {} bytes", n);
-        if n == 0 {
-            // A read of size zero signals EOF (end of file), finish gracefully
-            return Ok(());
-        }
-
-        // The `slice` method here is implemented in an extension trait: it
-        // returns an owned slice of our `Vec<u8>`, which we later turn back
-        // into the full `Vec<u8>`
-        debug!("USB: before write");
-        let (res, buf_write) = to.write(buf_read.slice(..n)).submit().await;
-        let n = res?;
-        debug!("USB: after write, {} bytes", n);
-        // Increment byte counters for statistics
-        if stats_interval.is_some() {
-            bytes_out += n;
-            bytes_out_last += n;
-        }
-
-        // Later is now, we want our full buffer back.
-        // That's why we declared our binding `mut` way back at the start of `copy`,
-        // even though we moved it into the very first `TcpStream::read` call.
-        buf = buf_write.into_inner();
-    }
-}
-
-async fn copy_stream_to_file(
-    from: Rc<tokio_uring::net::TcpStream>,
-    to: Rc<tokio_uring::fs::File>,
-    stats_interval: Option<Duration>,
-) -> Result<(), std::io::Error> {
-    // For statistics
-    let mut bytes_out: usize = 0;
-    let mut bytes_out_last: usize = 0;
-    let mut report_time = Instant::now();
-
-    let mut buf = vec![0u8; BUFFER_LEN];
-    loop {
-        // Handle stats printing
-        if stats_interval.is_some() && report_time.elapsed() > stats_interval.unwrap() {
-            let transferred_total = ByteSize::b(bytes_out.try_into().unwrap());
-            let transferred_last = ByteSize::b(bytes_out_last.try_into().unwrap());
-
-            let speed: u64 =
-                (bytes_out_last as f64 / report_time.elapsed().as_secs_f64()).round() as u64;
-            let speed = ByteSize::b(speed);
-
-            info!(
-                "{} 📱 phone to car transfer: {:#} ({:#}/s), {:#} total",
-                NAME,
-                transferred_last.to_string_as(true),
-                speed.to_string_as(true),
-                transferred_total.to_string_as(true),
-            );
-
-            report_time = Instant::now();
-            bytes_out_last = 0;
-        }
-
-        // things look weird: we pass ownership of the buffer to `read`, and we get
-        // it back, _even if there was an error_. There's a whole trait for that,
-        // which `Vec<u8>` implements!
-        debug!("TCP: before read");
-        let retval = from.read(buf);
-        let (res, buf_read) = timeout(READ_TIMEOUT, retval).await?;
-        // Propagate errors, see how many bytes we read
-        let n = res?;
-        debug!("TCP: after read, {} bytes", n);
-        if n == 0 {
-            // A read of size zero signals EOF (end of file), finish gracefully
-            return Ok(());
-        }
-
-        // The `slice` method here is implemented in an extension trait: it
-        // returns an owned slice of our `Vec<u8>`, which we later turn back
-        // into the full `Vec<u8>`
-        debug!("TCP: before write");
-        let (res, buf_write) = to.write_at(buf_read.slice(..n), 0).submit().await;
-        let n = res?;
-        debug!("TCP: after write, {} bytes", n);
-        // Increment byte counters for statistics
-        if stats_interval.is_some() {
-            bytes_out += n;
-            bytes_out_last += n;
-        }
-
-        // Later is now, we want our full buffer back.
-        // That's why we declared our binding `mut` way back at the start of `copy`,
-        // even though we moved it into the very first `TcpStream::read` call.
-        buf = buf_write.into_inner();
-    }
-}
-
 pub async fn io_loop(
     stats_interval: Option<Duration>,
     need_restart: Arc<Notify>,
@@ -317,14 +183,18 @@ pub async fn io_loop(
         let stream = Rc::new(stream);
 
         // We need to copy in both directions...
-        let mut from_file = tokio_uring::spawn(copy_file_to_stream(
+        let mut from_file = tokio_uring::spawn(copy(
             file.clone(),
             stream.clone(),
+            "USB",
+            "📲 car to phone",
             stats_interval,
         ));
-        let mut from_stream = tokio_uring::spawn(copy_stream_to_file(
+        let mut from_stream = tokio_uring::spawn(copy(
             stream.clone(),
             file.clone(),
+            "TCP",
+            "📱 phone to car",
             stats_interval,
         ));
 
