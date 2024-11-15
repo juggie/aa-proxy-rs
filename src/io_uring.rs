@@ -171,7 +171,7 @@ pub async fn io_loop(
             .await?;
 
         info!(
-            "{} ♾️ Starting to proxying data between TCP and USB...",
+            "{} ♾️ Starting to proxy data between TCP and USB...",
             NAME
         );
 
