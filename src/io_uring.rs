@@ -8,6 +8,10 @@ use tokio::sync::Notify;
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
 use tokio_uring::buf::BoundedBufMut;
+use tokio_uring::fs::File;
+use tokio_uring::fs::OpenOptions;
+use tokio_uring::net::TcpListener;
+use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 
@@ -34,7 +38,7 @@ pub trait Endpoint<E> {
     fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T>;
 }
 
-impl Endpoint<tokio_uring::fs::File> for tokio_uring::fs::File {
+impl Endpoint<File> for File {
     async fn read<T: BoundedBufMut>(&self, buf: T) -> BufResult<usize, T> {
         self.read_at(buf, 0).await
     }
@@ -43,7 +47,7 @@ impl Endpoint<tokio_uring::fs::File> for tokio_uring::fs::File {
     }
 }
 
-impl Endpoint<tokio_uring::net::TcpStream> for tokio_uring::net::TcpStream {
+impl Endpoint<TcpStream> for TcpStream {
     async fn read<T: BoundedBufMut>(&self, buf: T) -> BufResult<usize, T> {
         self.read(buf).await
     }
@@ -129,7 +133,7 @@ pub async fn io_loop(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
-    let listener = tokio_uring::net::TcpListener::bind(bind_addr).unwrap();
+    let listener = TcpListener::bind(bind_addr).unwrap();
     info!("{} 🛰️ TCP server bound to: <u>{}</u>", NAME, bind_addr);
     loop {
         info!("{} 💤 waiting for bluetooth handshake...", NAME);
@@ -159,7 +163,6 @@ pub async fn io_loop(
             "{} 📂 Opening USB accessory device: <u>{}</u>",
             NAME, USB_ACCESSORY_PATH
         );
-        use tokio_uring::fs::OpenOptions;
         let usb = OpenOptions::new()
             .read(true)
             .write(true)
