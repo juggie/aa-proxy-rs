@@ -170,10 +170,7 @@ pub async fn io_loop(
             .open(USB_ACCESSORY_PATH)
             .await?;
 
-        info!(
-            "{} ♾️ Starting to proxy data between TCP and USB...",
-            NAME
-        );
+        info!("{} ♾️ Starting to proxy data between TCP and USB...", NAME);
 
         // `read` and `write` take owned buffers (more on that later), and
         // there's no "per-socket" buffer, so they actually take `&self`.
