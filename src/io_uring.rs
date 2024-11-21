@@ -2,6 +2,7 @@ use crate::TCP_SERVER_PORT;
 use bytesize::ByteSize;
 use simplelog::*;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
@@ -62,6 +63,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
     dbg_name: &'static str,
     direction: &'static str,
     stats_interval: Option<Duration>,
+    bytes_written: Arc<AtomicUsize>,
 ) -> Result<(), std::io::Error> {
     // For statistics
     let mut bytes_out: usize = 0;
@@ -115,6 +117,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         debug!("{}: after write, {} bytes", dbg_name, n);
         // Increment byte counters for statistics
         if stats_interval.is_some() {
+            bytes_written.fetch_add(n, Ordering::Relaxed);
             bytes_out += n;
             bytes_out_last += n;
         }
@@ -124,6 +127,16 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // even though we moved it into the very first `TcpStream::read` call.
         buf = buf_write.into_inner();
     }
+}
+
+async fn transfer_monitor(
+    stats_interval: Option<Duration>,
+    _: Arc<AtomicUsize>,
+    _: Arc<AtomicUsize>,
+) -> Result<(), std::io::Error> {
+    //TODO: implementation
+
+    Ok(())
 }
 
 pub async fn io_loop(
@@ -180,7 +193,9 @@ pub async fn io_loop(
         // tokio-uring runtime is single-threaded, we can use `Rc` instead of
         // `Arc`.
         let file = Rc::new(usb);
+        let file_bytes = Arc::new(AtomicUsize::new(0));
         let stream = Rc::new(stream);
+        let stream_bytes = Arc::new(AtomicUsize::new(0));
 
         // We need to copy in both directions...
         let mut from_file = tokio_uring::spawn(copy(
@@ -189,6 +204,7 @@ pub async fn io_loop(
             "USB",
             "📲 car to phone",
             stats_interval,
+            stream_bytes.clone(),
         ));
         let mut from_stream = tokio_uring::spawn(copy(
             stream.clone(),
@@ -196,10 +212,15 @@ pub async fn io_loop(
             "TCP",
             "📱 phone to car",
             stats_interval,
+            file_bytes.clone(),
         ));
 
+        // Thread for monitoring transfer
+        let mut monitor =
+            tokio_uring::spawn(transfer_monitor(stats_interval, file_bytes, stream_bytes));
+
         // Stop as soon as one of them errors
-        let res = tokio::try_join!(&mut from_file, &mut from_stream);
+        let res = tokio::try_join!(&mut from_file, &mut from_stream, &mut monitor);
         if let Err(e) = res {
             error!("{} Connection error: {}", NAME, e);
         }
@@ -208,6 +229,7 @@ pub async fn io_loop(
         // for each direction)
         from_file.abort();
         from_stream.abort();
+        monitor.abort();
 
         // stream(s) closed, notify main loop to restart
         need_restart.notify_one();
