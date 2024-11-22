@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
 use tokio_uring::buf::BoundedBufMut;
 use tokio_uring::fs::File;
@@ -131,12 +131,57 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
 
 async fn transfer_monitor(
     stats_interval: Option<Duration>,
-    _: Arc<AtomicUsize>,
-    _: Arc<AtomicUsize>,
+    usb_bytes_written: Arc<AtomicUsize>,
+    tcp_bytes_written: Arc<AtomicUsize>,
 ) -> Result<(), std::io::Error> {
-    //TODO: implementation
+    let mut usb_bytes_out_last: usize = 0;
+    let mut tcp_bytes_out_last: usize = 0;
+    let mut report_time = Instant::now();
 
-    Ok(())
+    loop {
+        // Stats printing
+        if stats_interval.is_some() && report_time.elapsed() > stats_interval.unwrap() {
+            // load current total transfer from AtomicUsize:
+            let usb_bytes_out = usb_bytes_written.load(Ordering::Relaxed);
+            let tcp_bytes_out = tcp_bytes_written.load(Ordering::Relaxed);
+
+            // compute USB transfer
+            usb_bytes_out_last = usb_bytes_out - usb_bytes_out_last;
+            let usb_transferred_total = ByteSize::b(usb_bytes_out.try_into().unwrap());
+            let usb_transferred_last = ByteSize::b(usb_bytes_out_last.try_into().unwrap());
+            let usb_speed: u64 =
+                (usb_bytes_out_last as f64 / report_time.elapsed().as_secs_f64()).round() as u64;
+            let usb_speed = ByteSize::b(usb_speed);
+
+            // compute TCP transfer
+            tcp_bytes_out_last = tcp_bytes_out - tcp_bytes_out_last;
+            let tcp_transferred_total = ByteSize::b(tcp_bytes_out.try_into().unwrap());
+            let tcp_transferred_last = ByteSize::b(tcp_bytes_out_last.try_into().unwrap());
+            let tcp_speed: u64 =
+                (tcp_bytes_out_last as f64 / report_time.elapsed().as_secs_f64()).round() as u64;
+            let tcp_speed = ByteSize::b(tcp_speed);
+
+            info!(
+                "{} {} {: >9} ({: >9}/s), {: >9} total | {} {: >9} ({: >9}/s), {: >9} total",
+                NAME,
+                "phone -> car 🔺",
+                usb_transferred_last.to_string_as(true),
+                usb_speed.to_string_as(true),
+                usb_transferred_total.to_string_as(true),
+                "car -> phone 🔻",
+                tcp_transferred_last.to_string_as(true),
+                tcp_speed.to_string_as(true),
+                tcp_transferred_total.to_string_as(true),
+            );
+
+            // save values for next iteration
+            report_time = Instant::now();
+            usb_bytes_out_last = usb_bytes_out;
+            tcp_bytes_out_last = tcp_bytes_out;
+        }
+
+        sleep(Duration::from_millis(100)).await;
+    }
 }
 
 pub async fn io_loop(
