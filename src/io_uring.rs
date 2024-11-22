@@ -61,39 +61,10 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
     from: Rc<A>,
     to: Rc<B>,
     dbg_name: &'static str,
-    direction: &'static str,
-    stats_interval: Option<Duration>,
     bytes_written: Arc<AtomicUsize>,
 ) -> Result<(), std::io::Error> {
-    // For statistics
-    let mut bytes_out: usize = 0;
-    let mut bytes_out_last: usize = 0;
-    let mut report_time = Instant::now();
-
     let mut buf = vec![0u8; BUFFER_LEN];
     loop {
-        // Handle stats printing
-        if stats_interval.is_some() && report_time.elapsed() > stats_interval.unwrap() {
-            let transferred_total = ByteSize::b(bytes_out.try_into().unwrap());
-            let transferred_last = ByteSize::b(bytes_out_last.try_into().unwrap());
-
-            let speed: u64 =
-                (bytes_out_last as f64 / report_time.elapsed().as_secs_f64()).round() as u64;
-            let speed = ByteSize::b(speed);
-
-            info!(
-                "{} {} transfer: {:#} ({:#}/s), {:#} total",
-                NAME,
-                direction,
-                transferred_last.to_string_as(true),
-                speed.to_string_as(true),
-                transferred_total.to_string_as(true),
-            );
-
-            report_time = Instant::now();
-            bytes_out_last = 0;
-        }
-
         // things look weird: we pass ownership of the buffer to `read`, and we get
         // it back, _even if there was an error_. There's a whole trait for that,
         // which `Vec<u8>` implements!
@@ -116,11 +87,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         let n = res?;
         debug!("{}: after write, {} bytes", dbg_name, n);
         // Increment byte counters for statistics
-        if stats_interval.is_some() {
-            bytes_written.fetch_add(n, Ordering::Relaxed);
-            bytes_out += n;
-            bytes_out_last += n;
-        }
+        bytes_written.fetch_add(n, Ordering::Relaxed);
 
         // Later is now, we want our full buffer back.
         // That's why we declared our binding `mut` way back at the start of `copy`,
@@ -247,16 +214,12 @@ pub async fn io_loop(
             file.clone(),
             stream.clone(),
             "USB",
-            "📲 car to phone",
-            stats_interval,
             stream_bytes.clone(),
         ));
         let mut from_stream = tokio_uring::spawn(copy(
             stream.clone(),
             file.clone(),
             "TCP",
-            "📱 phone to car",
-            stats_interval,
             file_bytes.clone(),
         ));
 
