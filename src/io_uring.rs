@@ -19,6 +19,10 @@ use tokio_uring::UnsubmittedWrite;
 // module name for logging engine
 const NAME: &str = "<i><bright-black> proxy: </>";
 
+// Just a generic Result type to ease error handling for us. Errors in multithreaded
+// async contexts needs some extra restrictions
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
 const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 const BUFFER_LEN: usize = 16 * 1024;
 const READ_TIMEOUT: Duration = Duration::new(5, 0);
@@ -62,7 +66,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
     to: Rc<B>,
     dbg_name: &'static str,
     bytes_written: Arc<AtomicUsize>,
-) -> Result<(), std::io::Error> {
+) -> Result<()> {
     let mut buf = vec![0u8; BUFFER_LEN];
     loop {
         // things look weird: we pass ownership of the buffer to `read`, and we get
@@ -100,7 +104,7 @@ async fn transfer_monitor(
     stats_interval: Option<Duration>,
     usb_bytes_written: Arc<AtomicUsize>,
     tcp_bytes_written: Arc<AtomicUsize>,
-) -> Result<(), std::io::Error> {
+) -> Result<()> {
     let mut usb_bytes_out_last: usize = 0;
     let mut tcp_bytes_out_last: usize = 0;
     let mut report_time = Instant::now();
@@ -155,7 +159,7 @@ pub async fn io_loop(
     stats_interval: Option<Duration>,
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
     let listener = TcpListener::bind(bind_addr).unwrap();
