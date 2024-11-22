@@ -107,15 +107,18 @@ async fn transfer_monitor(
 ) -> Result<()> {
     let mut usb_bytes_out_last: usize = 0;
     let mut tcp_bytes_out_last: usize = 0;
+    let mut stall_usb_bytes_last: usize = 0;
+    let mut stall_tcp_bytes_last: usize = 0;
     let mut report_time = Instant::now();
+    let mut stall_check = Instant::now();
 
     loop {
+        // load current total transfer from AtomicUsize:
+        let usb_bytes_out = usb_bytes_written.load(Ordering::Relaxed);
+        let tcp_bytes_out = tcp_bytes_written.load(Ordering::Relaxed);
+
         // Stats printing
         if stats_interval.is_some() && report_time.elapsed() > stats_interval.unwrap() {
-            // load current total transfer from AtomicUsize:
-            let usb_bytes_out = usb_bytes_written.load(Ordering::Relaxed);
-            let tcp_bytes_out = tcp_bytes_written.load(Ordering::Relaxed);
-
             // compute USB transfer
             usb_bytes_out_last = usb_bytes_out - usb_bytes_out_last;
             let usb_transferred_total = ByteSize::b(usb_bytes_out.try_into().unwrap());
@@ -149,6 +152,22 @@ async fn transfer_monitor(
             report_time = Instant::now();
             usb_bytes_out_last = usb_bytes_out;
             tcp_bytes_out_last = tcp_bytes_out;
+        }
+
+        // transfer stall detection
+        if stall_check.elapsed() > READ_TIMEOUT {
+            // compute delta since last check
+            stall_usb_bytes_last = usb_bytes_out - stall_usb_bytes_last;
+            stall_tcp_bytes_last = tcp_bytes_out - stall_tcp_bytes_last;
+
+            if stall_usb_bytes_last == 0 || stall_tcp_bytes_last == 0 {
+                return Err("unexpected transfer stall".into());
+            }
+
+            // save values for next iteration
+            stall_check = Instant::now();
+            stall_usb_bytes_last = usb_bytes_out;
+            stall_tcp_bytes_last = tcp_bytes_out;
         }
 
         sleep(Duration::from_millis(100)).await;
