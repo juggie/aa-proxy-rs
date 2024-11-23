@@ -248,8 +248,7 @@ pub async fn io_loop(
         ));
 
         // Thread for monitoring transfer
-        let mut monitor =
-            tokio_uring::spawn(transfer_monitor(stats_interval, file_bytes, stream_bytes));
+        let mut monitor = tokio::spawn(transfer_monitor(stats_interval, file_bytes, stream_bytes));
 
         // Stop as soon as one of them errors
         let res = tokio::try_join!(&mut from_file, &mut from_stream, &mut monitor);
