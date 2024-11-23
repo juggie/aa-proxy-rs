@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
 use tokio_uring::buf::BoundedBufMut;
@@ -175,6 +176,14 @@ async fn transfer_monitor(
     }
 }
 
+async fn flatten<T>(handle: &mut JoinHandle<Result<T>>) -> Result<T> {
+    match handle.await {
+        Ok(Ok(result)) => Ok(result),
+        Ok(Err(err)) => Err(err),
+        Err(_) => Err("handling failed".into()),
+    }
+}
+
 pub async fn io_loop(
     stats_interval: Option<Duration>,
     need_restart: Arc<Notify>,
@@ -251,7 +260,11 @@ pub async fn io_loop(
         let mut monitor = tokio::spawn(transfer_monitor(stats_interval, file_bytes, stream_bytes));
 
         // Stop as soon as one of them errors
-        let res = tokio::try_join!(&mut from_file, &mut from_stream, &mut monitor);
+        let res = tokio::try_join!(
+            flatten(&mut from_file),
+            flatten(&mut from_stream),
+            flatten(&mut monitor)
+        );
         if let Err(e) = res {
             error!("{} Connection error: {}", NAME, e);
         }
