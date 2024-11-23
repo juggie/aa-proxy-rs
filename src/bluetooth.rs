@@ -22,6 +22,7 @@ use protobuf::Message;
 use WifiInfoResponse::AccessPointType;
 use WifiInfoResponse::SecurityMode;
 const HEADER_LEN: usize = 4;
+const STAGES: u8 = 5;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> bluetooth: </>";
@@ -225,7 +226,12 @@ async fn power_up_and_wait_for_connection(
     Ok((state, stream))
 }
 
-async fn send_message(stream: &mut Stream, id: MessageId, message: impl Message) -> Result<usize> {
+async fn send_message(
+    stream: &mut Stream,
+    stage: u8,
+    id: MessageId,
+    message: impl Message,
+) -> Result<usize> {
     let mut packet: Vec<u8> = vec![];
     let mut data = message.write_to_bytes()?;
 
@@ -236,12 +242,15 @@ async fn send_message(stream: &mut Stream, id: MessageId, message: impl Message)
     // append data and send
     packet.append(&mut data);
 
-    info!("{} 📨 Sending <yellow>{:?}</> frame to phone...", NAME, id);
+    info!(
+        "{} 📨 stage #{} of {}: Sending <yellow>{:?}</> frame to phone...",
+        NAME, stage, STAGES, id
+    );
 
     Ok(stream.write(&packet).await?)
 }
 
-async fn read_message(stream: &mut Stream, id: MessageId) -> Result<usize> {
+async fn read_message(stream: &mut Stream, stage: u8, id: MessageId) -> Result<usize> {
     let mut buf = vec![0; HEADER_LEN];
     let n = stream.read_exact(&mut buf).await?;
     debug!("received {} bytes: {:02X?}", n, buf);
@@ -257,7 +266,10 @@ async fn read_message(stream: &mut Stream, id: MessageId) -> Result<usize> {
         )
         .into());
     }
-    info!("{} 📨 Received <yellow>{:?}</> frame from phone", NAME, id);
+    info!(
+        "{} 📨 stage #{} of {}: Received <yellow>{:?}</> frame from phone",
+        NAME, stage, STAGES, id
+    );
 
     // read and discard the remaining bytes
     if len > 0 {
@@ -320,6 +332,7 @@ pub async fn bluetooth_setup_connection(
 ) -> Result<BluetoothState> {
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
+    let mut stage = 1;
 
     let (state, mut stream) = power_up_and_wait_for_connection(advertise, connect).await?;
 
@@ -327,8 +340,9 @@ pub async fn bluetooth_setup_connection(
     let mut start_req = WifiStartRequest::new();
     start_req.set_ip_address(String::from(WLAN_IP_ADDR));
     start_req.set_port(TCP_SERVER_PORT);
-    send_message(&mut stream, MessageId::WifiStartRequest, start_req).await?;
-    read_message(&mut stream, MessageId::WifiInfoRequest).await?;
+    send_message(&mut stream, stage, MessageId::WifiStartRequest, start_req).await?;
+    stage += 1;
+    read_message(&mut stream, stage, MessageId::WifiInfoRequest).await?;
 
     let mut info = WifiInfoResponse::new();
     info.set_ssid(String::from(WLAN_SSID));
@@ -340,9 +354,12 @@ pub async fn bluetooth_setup_connection(
     info.set_bssid(bssid);
     info.set_security_mode(SecurityMode::WPA2_PERSONAL);
     info.set_access_point_type(AccessPointType::DYNAMIC);
-    send_message(&mut stream, MessageId::WifiInfoResponse, info).await?;
-    read_message(&mut stream, MessageId::WifiStartResponse).await?;
-    read_message(&mut stream, MessageId::WifiConnectStatus).await?;
+    stage += 1;
+    send_message(&mut stream, stage, MessageId::WifiInfoResponse, info).await?;
+    stage += 1;
+    read_message(&mut stream, stage, MessageId::WifiStartResponse).await?;
+    stage += 1;
+    read_message(&mut stream, stage, MessageId::WifiConnectStatus).await?;
     tcp_start.notify_one();
     let _ = stream.shutdown().await?;
 
