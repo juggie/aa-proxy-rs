@@ -87,7 +87,8 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // returns an owned slice of our `Vec<u8>`, which we later turn back
         // into the full `Vec<u8>`
         debug!("{}: before write", dbg_name);
-        let (res, buf_write) = to.write(buf_read.slice(..n)).submit().await;
+        let retval = to.write(buf_read.slice(..n)).submit();
+        let (res, buf_write) = timeout(READ_TIMEOUT, retval).await?;
         let n = res?;
         debug!("{}: after write, {} bytes", dbg_name, n);
         // Increment byte counters for statistics
