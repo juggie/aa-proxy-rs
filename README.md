@@ -64,7 +64,7 @@ not ready with USB connection then we can't send data to the phone and Android w
 ## Demo
 [![asciicast](https://asciinema.org/a/686949.svg)](https://asciinema.org/a/686949)
 
-## Building and installing
+## Building
 `rpi02w` binaries build by [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) are for `arm-unknown-linux-gnueabihf` 32-bit architecture, probably
 because of usb-gadget module [incompatibility](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle/pull/129).
 To be able to properly crosscompile output binary I provided `.cargo/config.toml` with target set for this specific arch.
@@ -79,17 +79,31 @@ arm-unknown-linux-gnueabihf (installed)
 ```
 Besides a `gcc-arm-linux-gnueabihf` package is needed on Debian. This is distro-depended so I recommend to RTFM.
 
-After building you need to transfer the binary to the target filesystem (I am using ssh/scp for this) and start it.
-For permanent solution I also modified startup scripts - but how to do it is out of scope of this document.
-
 ## Building using Docker
 To build with Docker you need to have a [buildx](https://github.com/docker/buildx) and [BuildKit](https://github.com/moby/buildkit).<br>
-Then you can e.g. create some output dir and build the binary like this:
+Docker container is also preparing an SD card images based on [@nisargjhaveri](https://github.com/nisargjhaveri)'s [latests assets](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle/releases).
+It has to loop-mount that images, thus an insecure builder is [needed](https://docs.docker.com/reference/cli/docker/buildx/build/#allow).
+To sum it up - the following commands are needed when building for the first time:
 ```
 mkdir out
-DOCKER_BUILDKIT=1 docker build --output out .
+docker buildx create --use --name insecure-builder --buildkitd-flags '--allow-insecure-entitlement security.insecure'
+docker buildx build --builder insecure-builder --allow security.insecure --output out .
 ```
-After successful execution the resulting `aa-proxy-rs` will be in `out` directory.
+After successful execution the resulting `aa-proxy-rs` and SD card images will be in `out` directory.
+
+## Installing into target
+If you currently using a Raspberry Pi with working _WirelessAndroidAutoDongle_, then you can also manually install `aa-proxy-rs`:
+
+You need to transfer the resulting output binary to the target filesystem and start it. I am using ssh/scp for this, but it should be also possible with `wget`.
+You can also do it "offline" by making a changes directly on the SD card: mounting system partition and make necessary changes.
+Sample [startup script](https://raw.githubusercontent.com/manio/aa-proxy-rs/refs/heads/main/contrib/S93aa-proxy-rs) is provided for convenience.
+
+Example steps:
+- put `aa-proxy-rs` into /usr/bin
+- put `S93aa-proxy-rs` into /etc/init.d
+- remove or disable /etc/init.d/S93aawgd
+
+Startup parameters (see below) are defined [here](https://github.com/manio/aa-proxy-rs/blob/main/contrib/S93aa-proxy-rs#L10).
 
 ## Usage
 ```
