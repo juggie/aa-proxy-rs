@@ -9,7 +9,7 @@ use bluer::{
 use futures::StreamExt;
 use simplelog::*;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Notify;
@@ -250,10 +250,16 @@ async fn send_message(
     Ok(stream.write(&packet).await?)
 }
 
-async fn read_message(stream: &mut Stream, stage: u8, id: MessageId) -> Result<usize> {
+async fn read_message(
+    stream: &mut Stream,
+    stage: u8,
+    id: MessageId,
+    started: Instant,
+) -> Result<usize> {
     let mut buf = vec![0; HEADER_LEN];
     let n = stream.read_exact(&mut buf).await?;
     debug!("received {} bytes: {:02X?}", n, buf);
+    let elapsed = started.elapsed();
 
     let len: usize = u16::from_be_bytes(buf[0..=1].try_into()?).into();
     let message_id = u16::from_be_bytes(buf[2..=3].try_into()?);
@@ -267,8 +273,12 @@ async fn read_message(stream: &mut Stream, stage: u8, id: MessageId) -> Result<u
         .into());
     }
     info!(
-        "{} 📨 stage #{} of {}: Received <yellow>{:?}</> frame from phone",
-        NAME, stage, STAGES, id
+        "{} 📨 stage #{} of {}: Received <yellow>{:?}</> frame from phone (⏱️ {} ms)",
+        NAME,
+        stage,
+        STAGES,
+        id,
+        (elapsed.as_secs() * 1_000) + (elapsed.subsec_nanos() / 1_000_000) as u64,
     );
 
     // read and discard the remaining bytes
@@ -333,6 +343,7 @@ pub async fn bluetooth_setup_connection(
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
     let mut stage = 1;
+    let mut started;
 
     let (state, mut stream) = power_up_and_wait_for_connection(advertise, connect).await?;
 
@@ -342,7 +353,8 @@ pub async fn bluetooth_setup_connection(
     start_req.set_port(TCP_SERVER_PORT);
     send_message(&mut stream, stage, MessageId::WifiStartRequest, start_req).await?;
     stage += 1;
-    read_message(&mut stream, stage, MessageId::WifiInfoRequest).await?;
+    started = Instant::now();
+    read_message(&mut stream, stage, MessageId::WifiInfoRequest, started).await?;
 
     let mut info = WifiInfoResponse::new();
     info.set_ssid(String::from(WLAN_SSID));
@@ -357,9 +369,11 @@ pub async fn bluetooth_setup_connection(
     stage += 1;
     send_message(&mut stream, stage, MessageId::WifiInfoResponse, info).await?;
     stage += 1;
-    read_message(&mut stream, stage, MessageId::WifiStartResponse).await?;
+    started = Instant::now();
+    read_message(&mut stream, stage, MessageId::WifiStartResponse, started).await?;
     stage += 1;
-    read_message(&mut stream, stage, MessageId::WifiConnectStatus).await?;
+    started = Instant::now();
+    read_message(&mut stream, stage, MessageId::WifiConnectStatus, started).await?;
     tcp_start.notify_one();
     let _ = stream.shutdown().await?;
 
