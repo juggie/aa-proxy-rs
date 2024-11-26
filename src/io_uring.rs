@@ -1,5 +1,6 @@
 use crate::TCP_SERVER_PORT;
 use bytesize::ByteSize;
+use humantime::format_duration;
 use simplelog::*;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -229,6 +230,7 @@ pub async fn io_loop(
             .await?;
 
         info!("{} ♾️ Starting to proxy data between TCP and USB...", NAME);
+        let started = Instant::now();
 
         // `read` and `write` take owned buffers (more on that later), and
         // there's no "per-socket" buffer, so they actually take `&self`.
@@ -275,6 +277,11 @@ pub async fn io_loop(
         from_stream.abort();
         monitor.abort();
 
+        info!(
+            "{} ⌛ session time: {}",
+            NAME,
+            format_duration(started.elapsed()).to_string()
+        );
         // stream(s) closed, notify main loop to restart
         need_restart.notify_one();
     }
