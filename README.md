@@ -1,8 +1,24 @@
 # 🛸 aa-proxy-rs
 
 ## About
-This is a Rust-Written proxy tool to bridge between wireless android phone and a USB-wired car head unit for using Google's Android Auto.
+This is a Rust-Written proxy tool to bridge between wireless Android phone and a USB-wired car head unit for using Google's Android Auto.
 Currently it is intended to run as a more-or-less drop-in replacement of the `aawgd` from the [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project.
+
+## Features
+- written in [Rust](https://www.rust-lang.org/): reliable code and minimized all memory related issues and bugs
+- fast: main IO loop is using modern [io_uring](https://kernel.dk/io_uring.pdf) kernel API
+- reconnecting: trying to reconnect/recover AndroidAuto connection in any possible case
+- bandwidth/transfer statistics
+- stall transfer detection
+
+## Current project status
+Now after a lot of stress-testing and coding I think the project has matured enough, that I can say that the main stability goal was reached.
+I am using this project almost daily in my car and trying to get rid of all issues I may encounter.
+
+## SD card images
+I am using Nisarg's RaspberryPi images from [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project and replacing `aawgd` with `aa-proxy-rs`.<br>
+Those images are available on the [Release page](https://github.com/manio/aa-proxy-rs/releases).<br>
+You can also find there a pure `aa-proxy-rs` binary which you can install manually (read below: [Installing into target](#installing-into-target)).
 
 ## History and motivation
 There are a lot of commercial solutions like AAWireless or Motorola MA1. I even bought a clone of those on AliExpress, but it ended up not working in my car (passed to my friend which has a compatible car for this).
@@ -29,16 +45,8 @@ I was also trying to call read/writes in tokio tasks, but finally I decided to u
 And this finally worked perfectly fine (and also really efficient as a bonus).
 
 ## Limitations
-Currently only the default "connection strategy" is supported. I don't have a clue if and when I add the other ones. Time will tell.
+Currently only the default "connection strategy" is supported.
 My time resources are limited, so don't expect to prompt answers and ETAs on different requests. I am doing this as a hobby in my spare time.
-I've tested this only with my own `Raspberry Pi Zero 2 W` and my specific car head unit (old Renault R-Link).
-Config parameters from `/etc/aawgd.env` are not (yet?) supported.
-
-## Current stage and plans
-This project is on early stage of development:
-~~The tool is currently working fine for me from Raspberry Pi boot up to initial phone connection. It is then working stable until the phone goes out of range.
-There is left a lot of work to make it more stable and reliable, especially I am planning to add reconnecting/recovering code where it is applicable.~~<br>
-UPDATE: reconnecting code is now in place and working quite nice! :)
 
 ## How it works (technical)
 ![Hardware overview](images/aa-proxy-rs.webp)
