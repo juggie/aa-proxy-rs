@@ -76,7 +76,9 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // which `Vec<u8>` implements!
         debug!("{}: before read", dbg_name);
         let retval = from.read(buf);
-        let (res, buf_read) = timeout(READ_TIMEOUT, retval).await?;
+        let (res, buf_read) = timeout(READ_TIMEOUT, retval)
+            .await
+            .map_err(|e| -> String { format!("{} read: {}", dbg_name, e) })?;
         // Propagate errors, see how many bytes we read
         let n = res?;
         debug!("{}: after read, {} bytes", dbg_name, n);
@@ -90,7 +92,9 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // into the full `Vec<u8>`
         debug!("{}: before write", dbg_name);
         let retval = to.write(buf_read.slice(..n)).submit();
-        let (res, buf_write) = timeout(READ_TIMEOUT, retval).await?;
+        let (res, buf_write) = timeout(READ_TIMEOUT, retval)
+            .await
+            .map_err(|e| -> String { format!("{} write: {}", dbg_name, e) })?;
         let n = res?;
         debug!("{}: after write, {} bytes", dbg_name, n);
         // Increment byte counters for statistics
