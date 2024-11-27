@@ -275,7 +275,7 @@ pub async fn io_loop(
             flatten(&mut monitor)
         );
         if let Err(e) = res {
-            error!("{} Connection error: {}", NAME, e);
+            error!("{} 🔴 Connection error: {}", NAME, e);
         }
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`
