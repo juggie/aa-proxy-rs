@@ -66,7 +66,8 @@ impl Endpoint<TcpStream> for TcpStream {
 async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
     from: Rc<A>,
     to: Rc<B>,
-    dbg_name: &'static str,
+    dbg_name_from: &'static str,
+    dbg_name_to: &'static str,
     bytes_written: Arc<AtomicUsize>,
 ) -> Result<()> {
     let mut buf = vec![0u8; BUFFER_LEN];
@@ -74,14 +75,14 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // things look weird: we pass ownership of the buffer to `read`, and we get
         // it back, _even if there was an error_. There's a whole trait for that,
         // which `Vec<u8>` implements!
-        debug!("{}: before read", dbg_name);
+        debug!("{}: before read", dbg_name_from);
         let retval = from.read(buf);
         let (res, buf_read) = timeout(READ_TIMEOUT, retval)
             .await
-            .map_err(|e| -> String { format!("{} read: {}", dbg_name, e) })?;
+            .map_err(|e| -> String { format!("{} read: {}", dbg_name_from, e) })?;
         // Propagate errors, see how many bytes we read
         let n = res?;
-        debug!("{}: after read, {} bytes", dbg_name, n);
+        debug!("{}: after read, {} bytes", dbg_name_from, n);
         if n == 0 {
             // A read of size zero signals EOF (end of file), finish gracefully
             return Ok(());
@@ -90,13 +91,13 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // The `slice` method here is implemented in an extension trait: it
         // returns an owned slice of our `Vec<u8>`, which we later turn back
         // into the full `Vec<u8>`
-        debug!("{}: before write", dbg_name);
+        debug!("{}: before write", dbg_name_to);
         let retval = to.write(buf_read.slice(..n)).submit();
         let (res, buf_write) = timeout(READ_TIMEOUT, retval)
             .await
-            .map_err(|e| -> String { format!("{} write: {}", dbg_name, e) })?;
+            .map_err(|e| -> String { format!("{} write: {}", dbg_name_to, e) })?;
         let n = res?;
-        debug!("{}: after write, {} bytes", dbg_name, n);
+        debug!("{}: after write, {} bytes", dbg_name_to, n);
         // Increment byte counters for statistics
         bytes_written.fetch_add(n, Ordering::Relaxed);
 
@@ -253,12 +254,14 @@ pub async fn io_loop(
             file.clone(),
             stream.clone(),
             "USB",
+            "TCP",
             stream_bytes.clone(),
         ));
         let mut from_stream = tokio_uring::spawn(copy(
             stream.clone(),
             file.clone(),
             "TCP",
+            "USB",
             file_bytes.clone(),
         ));
 
