@@ -18,7 +18,7 @@ I am using this project almost daily in my car and trying to get rid of all issu
 ## SD card images
 I am using Nisarg's RaspberryPi images from [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project and replacing `aawgd` with `aa-proxy-rs`.<br>
 Those images are available on the [Release page](https://github.com/manio/aa-proxy-rs/releases).<br>
-You can also find there a pure `aa-proxy-rs` binary which you can install manually (read below: [Installing into target](#installing-into-target)).
+You can also find there a pure `aa-proxy-rs` binary which you can install manually on targets with similar libc versions, or build your own (read below: [Installing into target](#installing-into-target) and [Building](#building)).
 
 ## History and motivation
 There are a lot of commercial solutions like AAWireless or Motorola MA1. I even bought a clone of those on AliExpress, but it ended up not working in my car (passed to my friend which has a compatible car for this).
@@ -77,6 +77,10 @@ not ready with USB connection then we can't send data to the phone and Android w
 because of usb-gadget module [incompatibility](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle/pull/129).
 To be able to properly crosscompile output binary I provided `.cargo/config.toml` with target set for this specific arch.
 
+### Dependencies
+1. [Installing Rust](https://www.rust-lang.org/tools/install)
+2. `gcc-arm-linux-gnueabihf` package is needed on Debian. This is distro-depended so I recommend to RTFM.
+
 To compile you need to add proper rustup target with:
 ```
 rustup target add arm-unknown-linux-gnueabihf
@@ -85,7 +89,15 @@ and make sure that it is _installed_ on target list:
 ```
 arm-unknown-linux-gnueabihf (installed)
 ```
-Besides a `gcc-arm-linux-gnueabihf` package is needed on Debian. This is distro-depended so I recommend to RTFM.
+and then use:
+```
+cargo build --release
+```
+
+To compile a STATIC `aa-proxy-rs` binary (to be able to use it on target with older OSes and different libc versions), you need to compile with:
+```
+RUSTFLAGS='-C target-feature=+crt-static' cargo build --release
+```
 
 ## Building using Docker
 To build with Docker you need to have a [buildx](https://github.com/docker/buildx) and [BuildKit](https://github.com/moby/buildkit).<br>
