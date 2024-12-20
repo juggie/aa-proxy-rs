@@ -79,7 +79,7 @@ To be able to properly crosscompile output binary I provided `.cargo/config.toml
 
 To compile you need to add proper rustup target with:
 ```
-rustup target add arm-unknown-linux-gnueabi
+rustup target add arm-unknown-linux-gnueabihf
 ```
 and make sure that it is _installed_ on target list:
 ```
