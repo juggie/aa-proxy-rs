@@ -78,19 +78,13 @@ async fn power_up_and_wait_for_connection(
     connect: Option<Address>,
 ) -> Result<(BluetoothState, Stream)> {
     // setting BT alias for further use
-    let alias: String;
-
-    match btalias {
-        None => {
-            alias = match get_cpu_serial_number_suffix().await {
-                Ok(suffix) => format!("{}-{}", BT_ALIAS, suffix),
-                Err(_) => String::from(BT_ALIAS),
-            };
-        }
-        Some(btalias) => {
-            alias = btalias;
-        }
-    }
+    let alias = match btalias {
+        None => match get_cpu_serial_number_suffix().await {
+            Ok(suffix) => format!("{}-{}", BT_ALIAS, suffix),
+            Err(_) => String::from(BT_ALIAS),
+        },
+        Some(btalias) => btalias,
+    };
     info!("{} 🥏 Bluetooth alias: <bold><green>{}</>", NAME, alias);
 
     let session = bluer::Session::new().await?;
