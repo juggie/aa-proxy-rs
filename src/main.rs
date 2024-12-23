@@ -59,27 +59,16 @@ struct Args {
     stats_interval: u16,
 
     /// UDC Controller name
-    #[clap(
-        short,
-        long
-    )]
+    #[clap(short, long)]
     udc: Option<String>,
 
     /// WLAN / Wi-Fi Hotspot interface
-    #[clap(
-        short,
-        long,
-        default_value = "wlan0"
-    )]
+    #[clap(short, long, default_value = "wlan0")]
     iface: String,
 
-     /// BLE device name
-    #[clap(
-        short,
-        long
-    )]
+    /// BLE device name
+    #[clap(short, long)]
     btalias: Option<String>,
-    
 }
 
 fn logging_init(debug: bool, log_path: &PathBuf) {
@@ -151,7 +140,15 @@ async fn tokio_main(
 
         let bt_stop;
         loop {
-            match bluetooth_setup_connection(advertise, btalias.clone(), &iface, connect, tcp_start.clone()).await {
+            match bluetooth_setup_connection(
+                advertise,
+                btalias.clone(),
+                &iface,
+                connect,
+                tcp_start.clone(),
+            )
+            .await
+            {
                 Ok(state) => {
                     // we're ready, gracefully shutdown bluetooth in task
                     bt_stop = tokio::spawn(async move { bluetooth_stop(state).await });

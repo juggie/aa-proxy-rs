@@ -62,7 +62,7 @@ impl UsbGadgetState {
             configfs_path: PathBuf::from("/sys/kernel/config/usb_gadget"),
             udc_name: String::new(),
             legacy,
-            udc
+            udc,
         };
 
         // If UDC argument is passed, use it, otherwise check sys

@@ -7,8 +7,8 @@ use bluer::{
     Adapter, Address, Uuid,
 };
 use futures::StreamExt;
-use simplelog::*;
 use simple_config_parser::Config;
+use simplelog::*;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::AsyncReadExt;
@@ -88,7 +88,7 @@ async fn power_up_and_wait_for_connection(
             };
         }
         Some(btalias) => {
-                alias = btalias;
+            alias = btalias;
         }
     }
     info!("{} 🥏 Bluetooth alias: <bold><green>{}</>", NAME, alias);
@@ -361,15 +361,15 @@ pub async fn bluetooth_setup_connection(
 
     let (state, mut stream) = power_up_and_wait_for_connection(advertise, btalias, connect).await?;
 
-    
     // Get UP interface and IP
     for ifa in netif::up().unwrap() {
         match ifa.name() {
             val if val == iface => {
                 debug!("Found interface: {:?}", ifa);
                 // IPv4 Address contains None scope_id, while IPv6 contains Some
-                match ifa.scope_id() { None => {
-                        wlan_ip_addr =  ifa.address().to_string();
+                match ifa.scope_id() {
+                    None => {
+                        wlan_ip_addr = ifa.address().to_string();
                         break;
                     }
                     _ => (),
@@ -380,9 +380,7 @@ pub async fn bluetooth_setup_connection(
     }
 
     // Create a new config from hostapd.conf
-    let hostapd = Config::new()
-        .file(HOSTAPD_FILE)
-        .unwrap();
+    let hostapd = Config::new().file(HOSTAPD_FILE).unwrap();
 
     // read SSID and WPA_KEY
     let wlan_ssid = &hostapd.get_str("ssid").unwrap();
@@ -401,7 +399,10 @@ pub async fn bluetooth_setup_connection(
     let mut info = WifiInfoResponse::new();
     info.set_ssid(String::from(wlan_ssid));
     info.set_key(String::from(wlan_wpa_key));
-    info!("{} 🛜 Sending Host SSID and Password: {}, {}", NAME, wlan_ssid, wlan_wpa_key);
+    info!(
+        "{} 🛜 Sending Host SSID and Password: {}, {}",
+        NAME, wlan_ssid, wlan_wpa_key
+    );
     let bssid = mac_address::mac_address_by_name(iface)
         .unwrap()
         .unwrap()
