@@ -389,7 +389,7 @@ pub async fn bluetooth_setup_connection(
     info!("{} 📲 Sending parameters via bluetooth to phone...", NAME);
     let mut start_req = WifiStartRequest::new();
     info!("{} 🛜 Sending Host IP Address: {}", NAME, wlan_ip_addr);
-    start_req.set_ip_address(String::from(wlan_ip_addr));
+    start_req.set_ip_address(wlan_ip_addr);
     start_req.set_port(TCP_SERVER_PORT);
     send_message(&mut stream, stage, MessageId::WifiStartRequest, start_req).await?;
     stage += 1;
