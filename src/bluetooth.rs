@@ -7,6 +7,7 @@ use bluer::{
     Adapter, Address, Uuid,
 };
 use futures::StreamExt;
+use simple_config_parser::Config;
 use simplelog::*;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -36,10 +37,9 @@ const HSP_HS_UUID: Uuid = Uuid::from_u128(0x0000110800001000800000805f9b34fb);
 const HSP_AG_UUID: Uuid = Uuid::from_u128(0x0000111200001000800000805f9b34fb);
 const BT_ALIAS: &str = "WirelessAADongle";
 
-const WLAN_IFACE: &str = "wlan0";
-const WLAN_IP_ADDR: &str = "10.0.0.1";
-const WLAN_SSID: &str = "AAWirelessDongle";
-const WLAN_WPA_KEY: &str = "ConnectAAWirelessDongle";
+const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
+
+const HOSTAPD_FILE: &str = "/etc/hostapd.conf";
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(u16)]
@@ -74,12 +74,16 @@ pub async fn get_cpu_serial_number_suffix() -> Result<String> {
 
 async fn power_up_and_wait_for_connection(
     advertise: bool,
+    btalias: Option<String>,
     connect: Option<Address>,
 ) -> Result<(BluetoothState, Stream)> {
     // setting BT alias for further use
-    let alias = match get_cpu_serial_number_suffix().await {
-        Ok(suffix) => format!("{}-{}", BT_ALIAS, suffix),
-        Err(_) => String::from(BT_ALIAS),
+    let alias = match btalias {
+        None => match get_cpu_serial_number_suffix().await {
+            Ok(suffix) => format!("{}-{}", BT_ALIAS, suffix),
+            Err(_) => String::from(BT_ALIAS),
+        },
+        Some(btalias) => btalias,
     };
     info!("{} 🥏 Bluetooth alias: <bold><green>{}</>", NAME, alias);
 
@@ -337,6 +341,8 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
 
 pub async fn bluetooth_setup_connection(
     advertise: bool,
+    btalias: Option<String>,
+    iface: &str,
     connect: Option<Address>,
     tcp_start: Arc<Notify>,
 ) -> Result<BluetoothState> {
@@ -345,11 +351,39 @@ pub async fn bluetooth_setup_connection(
     let mut stage = 1;
     let mut started;
 
-    let (state, mut stream) = power_up_and_wait_for_connection(advertise, connect).await?;
+    let mut wlan_ip_addr = String::from(DEFAULT_WLAN_ADDR);
+
+    let (state, mut stream) = power_up_and_wait_for_connection(advertise, btalias, connect).await?;
+
+    // Get UP interface and IP
+    for ifa in netif::up().unwrap() {
+        match ifa.name() {
+            val if val == iface => {
+                debug!("Found interface: {:?}", ifa);
+                // IPv4 Address contains None scope_id, while IPv6 contains Some
+                match ifa.scope_id() {
+                    None => {
+                        wlan_ip_addr = ifa.address().to_string();
+                        break;
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+    }
+
+    // Create a new config from hostapd.conf
+    let hostapd = Config::new().file(HOSTAPD_FILE).unwrap();
+
+    // read SSID and WPA_KEY
+    let wlan_ssid = &hostapd.get_str("ssid").unwrap();
+    let wlan_wpa_key = &hostapd.get_str("wpa_passphrase").unwrap();
 
     info!("{} 📲 Sending parameters via bluetooth to phone...", NAME);
     let mut start_req = WifiStartRequest::new();
-    start_req.set_ip_address(String::from(WLAN_IP_ADDR));
+    info!("{} 🛜 Sending Host IP Address: {}", NAME, wlan_ip_addr);
+    start_req.set_ip_address(wlan_ip_addr);
     start_req.set_port(TCP_SERVER_PORT);
     send_message(&mut stream, stage, MessageId::WifiStartRequest, start_req).await?;
     stage += 1;
@@ -357,9 +391,13 @@ pub async fn bluetooth_setup_connection(
     read_message(&mut stream, stage, MessageId::WifiInfoRequest, started).await?;
 
     let mut info = WifiInfoResponse::new();
-    info.set_ssid(String::from(WLAN_SSID));
-    info.set_key(String::from(WLAN_WPA_KEY));
-    let bssid = mac_address::mac_address_by_name(WLAN_IFACE)
+    info.set_ssid(String::from(wlan_ssid));
+    info.set_key(String::from(wlan_wpa_key));
+    info!(
+        "{} 🛜 Sending Host SSID and Password: {}, {}",
+        NAME, wlan_ssid, wlan_wpa_key
+    );
+    let bssid = mac_address::mac_address_by_name(iface)
         .unwrap()
         .unwrap()
         .to_string();
