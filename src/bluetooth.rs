@@ -39,7 +39,7 @@ const BT_ALIAS: &str = "WirelessAADongle";
 
 const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
 
-const HOSTAPD_FILE: &str = "/etc/hostapd/hostapd.conf";
+const HOSTAPD_FILE: &str = "/etc/hostapd.conf";
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(u16)]
