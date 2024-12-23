@@ -123,17 +123,17 @@ USAGE:
 
 OPTIONS:
     -a, --advertise                   BLE advertising
-    -b, --btalias                     Specify the BLE name of the device
+    -b, --btalias <BTALIAS>           BLE device name
     -c, --connect <CONNECT>           Auto-connect to saved phone or specified phone MAC address if
                                       provided
     -d, --debug                       Enable debug info
-    -i, --interface                   Specify Wi-Fi Hotspot network interface
-    -l, --legacy                      Enable legacy mode
     -h, --help                        Print help information
+    -i, --iface <IFACE>               WLAN / Wi-Fi Hotspot interface [default: wlan0]
+    -l, --legacy                      Enable legacy mode
     -l, --logfile <LOGFILE>           Log file path [default: /var/log/aa-proxy-rs.log]
     -s, --stats-interval <SECONDS>    Interval of showing data transfer statistics (0 = disabled)
                                       [default: 0]
-    -u, --udc <UDCNAME>               Specify UDC Controller to use
+    -u, --udc <UDC>                   UDC Controller name
     -V, --version                     Print version information
 ```
 Most options are self explanatory, but these needs some more attention:<br>
