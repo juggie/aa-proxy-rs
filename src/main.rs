@@ -26,7 +26,6 @@ const NAME: &str = "<i><bright-black> main: </>";
 
 const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
 const TCP_SERVER_PORT: i32 = 5288;
-const HOSTAPD_FILE: &str = "/etc/hostapd.conf";
 
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
@@ -69,6 +68,10 @@ struct Args {
     #[clap(short, long, default_value = "wlan0")]
     iface: String,
 
+    /// hostapd.conf file location
+    #[clap(long, parse(from_os_str), default_value = "/etc/hostapd.conf")]
+    hostapd_conf: PathBuf,
+
     /// BLE device name
     #[clap(short, long)]
     btalias: Option<String>,
@@ -83,7 +86,7 @@ struct WifiConfig {
     wpa_key: String,
 }
 
-fn init_wifi_config(iface: &str) -> WifiConfig {
+fn init_wifi_config(iface: &str, hostapd_conf: PathBuf) -> WifiConfig {
     let mut ip_addr = String::from(DEFAULT_WLAN_ADDR);
 
     // Get UP interface and IP
@@ -110,7 +113,7 @@ fn init_wifi_config(iface: &str) -> WifiConfig {
         .to_string();
 
     // Create a new config from hostapd.conf
-    let hostapd = Config::new().file(HOSTAPD_FILE).unwrap();
+    let hostapd = Config::new().file(hostapd_conf).unwrap();
 
     // read SSID and WPA_KEY
     let ssid = &hostapd.get_str("ssid").unwrap();
@@ -173,6 +176,7 @@ async fn tokio_main(
     btalias: Option<String>,
     legacy: bool,
     iface: String,
+    hostapd_conf: PathBuf,
     connect: Option<Address>,
     udc: Option<String>,
     need_restart: Arc<Notify>,
@@ -186,7 +190,7 @@ async fn tokio_main(
         std::thread::spawn(|| uevent_listener(accessory_started_cloned));
     }
 
-    let wifi_conf = init_wifi_config(&iface);
+    let wifi_conf = init_wifi_config(&iface, hostapd_conf);
     let mut usb = UsbGadgetState::new(legacy, udc);
     loop {
         if let Err(e) = usb.init() {
@@ -282,6 +286,7 @@ fn main() {
             args.btalias,
             args.legacy,
             args.iface,
+            args.hostapd_conf,
             args.connect,
             args.udc,
             need_restart,
