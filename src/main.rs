@@ -8,6 +8,7 @@ use bluetooth::bluetooth_stop;
 use clap::Parser;
 use humantime::format_duration;
 use io_uring::io_loop;
+use simple_config_parser::Config;
 use simplelog::*;
 use usb_gadget::uevent_listener;
 use usb_gadget::UsbGadgetState;
@@ -23,7 +24,9 @@ use tokio::time::Instant;
 // module name for logging engine
 const NAME: &str = "<i><bright-black> main: </>";
 
+const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
 const TCP_SERVER_PORT: i32 = 5288;
+const HOSTAPD_FILE: &str = "/etc/hostapd.conf";
 
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
@@ -69,6 +72,57 @@ struct Args {
     /// BLE device name
     #[clap(short, long)]
     btalias: Option<String>,
+}
+
+#[derive(Clone)]
+struct WifiConfig {
+    ip_addr: String,
+    port: i32,
+    ssid: String,
+    bssid: String,
+    wpa_key: String,
+}
+
+fn init_wifi_config(iface: &str) -> WifiConfig {
+    let mut ip_addr = String::from(DEFAULT_WLAN_ADDR);
+
+    // Get UP interface and IP
+    for ifa in netif::up().unwrap() {
+        match ifa.name() {
+            val if val == iface => {
+                debug!("Found interface: {:?}", ifa);
+                // IPv4 Address contains None scope_id, while IPv6 contains Some
+                match ifa.scope_id() {
+                    None => {
+                        ip_addr = ifa.address().to_string();
+                        break;
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+    }
+
+    let bssid = mac_address::mac_address_by_name(iface)
+        .unwrap()
+        .unwrap()
+        .to_string();
+
+    // Create a new config from hostapd.conf
+    let hostapd = Config::new().file(HOSTAPD_FILE).unwrap();
+
+    // read SSID and WPA_KEY
+    let ssid = &hostapd.get_str("ssid").unwrap();
+    let wpa_key = &hostapd.get_str("wpa_passphrase").unwrap();
+
+    WifiConfig {
+        ip_addr,
+        port: TCP_SERVER_PORT,
+        ssid: ssid.into(),
+        bssid,
+        wpa_key: wpa_key.into(),
+    }
 }
 
 fn logging_init(debug: bool, log_path: &PathBuf) {
@@ -132,6 +186,7 @@ async fn tokio_main(
         std::thread::spawn(|| uevent_listener(accessory_started_cloned));
     }
 
+    let wifi_conf = init_wifi_config(&iface);
     let mut usb = UsbGadgetState::new(legacy, udc);
     loop {
         if let Err(e) = usb.init() {
@@ -143,8 +198,8 @@ async fn tokio_main(
             match bluetooth_setup_connection(
                 advertise,
                 btalias.clone(),
-                &iface,
                 connect,
+                wifi_conf.clone(),
                 tcp_start.clone(),
             )
             .await
