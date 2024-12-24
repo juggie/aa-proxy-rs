@@ -127,26 +127,48 @@ Startup parameters (see below) are defined [here](https://github.com/manio/aa-pr
 
 ## Usage
 ```
-aa-proxy-rs 0.1.0
+aa-proxy-rs 0.2.0
 AndroidAuto wired/wireless proxy
 
 USAGE:
     aa-proxy-rs [OPTIONS]
 
 OPTIONS:
-    -a, --advertise                   BLE advertising
-    -b, --btalias <BTALIAS>           BLE device name
-    -c, --connect <CONNECT>           Auto-connect to saved phone or specified phone MAC address if
-                                      provided
-    -d, --debug                       Enable debug info
-    -h, --help                        Print help information
-    -i, --iface <IFACE>               WLAN / Wi-Fi Hotspot interface [default: wlan0]
-    -l, --legacy                      Enable legacy mode
-    -l, --logfile <LOGFILE>           Log file path [default: /var/log/aa-proxy-rs.log]
-    -s, --stats-interval <SECONDS>    Interval of showing data transfer statistics (0 = disabled)
-                                      [default: 0]
-    -u, --udc <UDC>                   UDC Controller name
-    -V, --version                     Print version information
+    -a, --advertise
+            BLE advertising
+
+    -b, --btalias <BTALIAS>
+            BLE device name
+
+    -c, --connect <CONNECT>
+            Auto-connect to saved phone or specified phone MAC address if provided
+
+    -d, --debug
+            Enable debug info
+
+    -h, --help
+            Print help information
+
+        --hostapd-conf <HOSTAPD_CONF>
+            hostapd.conf file location [default: /etc/hostapd.conf]
+
+    -i, --iface <IFACE>
+            WLAN / Wi-Fi Hotspot interface [default: wlan0]
+
+    -l, --legacy
+            Enable legacy mode
+
+    -l, --logfile <LOGFILE>
+            Log file path [default: /var/log/aa-proxy-rs.log]
+
+    -s, --stats-interval <SECONDS>
+            Interval of showing data transfer statistics (0 = disabled) [default: 0]
+
+    -u, --udc <UDC>
+            UDC Controller name
+
+    -V, --version
+            Print version information
 ```
 Most options are self explanatory, but these needs some more attention:<br>
 - `-l, --legacy`<br>
