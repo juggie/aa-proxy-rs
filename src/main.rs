@@ -75,6 +75,11 @@ struct Args {
     /// BLE device name
     #[clap(short, long)]
     btalias: Option<String>,
+
+    /// Keep alive mode: BLE adapter doesn't turn off after successful connection,
+    /// so that the phone can remain connected (used in special configurations)
+    #[clap(short, long)]
+    keepalive: bool,
 }
 
 #[derive(Clone)]
@@ -179,6 +184,7 @@ async fn tokio_main(
     hostapd_conf: PathBuf,
     connect: Option<Address>,
     udc: Option<String>,
+    keepalive: bool,
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
 ) {
@@ -205,6 +211,7 @@ async fn tokio_main(
                 connect,
                 wifi_conf.clone(),
                 tcp_start.clone(),
+                keepalive,
             )
             .await
             {
@@ -289,6 +296,7 @@ fn main() {
             args.hostapd_conf,
             args.connect,
             args.udc,
+            args.keepalive,
             need_restart,
             tcp_start,
         )

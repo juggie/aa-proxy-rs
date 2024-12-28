@@ -155,6 +155,10 @@ OPTIONS:
     -i, --iface <IFACE>
             WLAN / Wi-Fi Hotspot interface [default: wlan0]
 
+    -k, --keepalive
+            Keep alive mode: BLE adapter doesn't turn off after successful connection, so that the
+            phone can remain connected (used in special configurations)
+
     -l, --legacy
             Enable legacy mode
 
