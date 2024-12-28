@@ -55,6 +55,7 @@ pub struct BluetoothState {
     handle_aa: ProfileHandle,
     handle_hsp: JoinHandle<Result<ProfileHandle>>,
     handle_agent: AgentHandle,
+    keepalive: bool,
 }
 
 pub async fn get_cpu_serial_number_suffix() -> Result<String> {
@@ -71,6 +72,7 @@ async fn power_up_and_wait_for_connection(
     advertise: bool,
     btalias: Option<String>,
     connect: Option<Address>,
+    keepalive: bool,
 ) -> Result<(BluetoothState, Stream)> {
     // setting BT alias for further use
     let alias = match btalias {
@@ -220,6 +222,7 @@ async fn power_up_and_wait_for_connection(
         handle_aa,
         handle_hsp: task_hsp,
         handle_agent,
+        keepalive,
     };
 
     Ok((state, stream))
@@ -328,8 +331,12 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
         }
     }
 
-    state.adapter.set_powered(false).await?;
-    info!("{} 💤 Bluetooth adapter powered off", NAME);
+    if state.keepalive {
+        info!("{} 💤 Bluetooth adapter stays on", NAME);
+    } else {
+        state.adapter.set_powered(false).await?;
+        info!("{} 💤 Bluetooth adapter powered off", NAME);
+    }
 
     Ok(())
 }
@@ -340,13 +347,15 @@ pub async fn bluetooth_setup_connection(
     connect: Option<Address>,
     wifi_config: WifiConfig,
     tcp_start: Arc<Notify>,
+    keepalive: bool,
 ) -> Result<BluetoothState> {
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
     let mut stage = 1;
     let mut started;
 
-    let (state, mut stream) = power_up_and_wait_for_connection(advertise, btalias, connect).await?;
+    let (state, mut stream) =
+        power_up_and_wait_for_connection(advertise, btalias, connect, keepalive).await?;
 
     info!("{} 📲 Sending parameters via bluetooth to phone...", NAME);
     let mut start_req = WifiStartRequest::new();
