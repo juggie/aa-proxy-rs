@@ -27,7 +27,6 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 const BUFFER_LEN: usize = 16 * 1024;
-const READ_TIMEOUT: Duration = Duration::new(5, 0);
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
@@ -69,6 +68,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
     dbg_name_from: &'static str,
     dbg_name_to: &'static str,
     bytes_written: Arc<AtomicUsize>,
+    read_timeout: Duration,
 ) -> Result<()> {
     let mut buf = vec![0u8; BUFFER_LEN];
     loop {
@@ -77,7 +77,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // which `Vec<u8>` implements!
         debug!("{}: before read", dbg_name_from);
         let retval = from.read(buf);
-        let (res, buf_read) = timeout(READ_TIMEOUT, retval)
+        let (res, buf_read) = timeout(read_timeout, retval)
             .await
             .map_err(|e| -> String { format!("{} read: {}", dbg_name_from, e) })?;
         // Propagate errors, see how many bytes we read
@@ -93,7 +93,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // into the full `Vec<u8>`
         debug!("{}: before write", dbg_name_to);
         let retval = to.write(buf_read.slice(..n)).submit();
-        let (res, buf_write) = timeout(READ_TIMEOUT, retval)
+        let (res, buf_write) = timeout(read_timeout, retval)
             .await
             .map_err(|e| -> String { format!("{} write: {}", dbg_name_to, e) })?;
         let n = res?;
@@ -112,6 +112,7 @@ async fn transfer_monitor(
     stats_interval: Option<Duration>,
     usb_bytes_written: Arc<AtomicUsize>,
     tcp_bytes_written: Arc<AtomicUsize>,
+    read_timeout: Duration,
 ) -> Result<()> {
     let mut usb_bytes_out_last: usize = 0;
     let mut tcp_bytes_out_last: usize = 0;
@@ -163,7 +164,7 @@ async fn transfer_monitor(
         }
 
         // transfer stall detection
-        if stall_check.elapsed() > READ_TIMEOUT {
+        if stall_check.elapsed() > read_timeout {
             // compute delta since last check
             stall_usb_bytes_last = usb_bytes_out - stall_usb_bytes_last;
             stall_tcp_bytes_last = tcp_bytes_out - stall_tcp_bytes_last;
@@ -194,6 +195,7 @@ pub async fn io_loop(
     stats_interval: Option<Duration>,
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
+    read_timeout: Duration,
 ) -> Result<()> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
@@ -256,6 +258,7 @@ pub async fn io_loop(
             "USB",
             "TCP",
             stream_bytes.clone(),
+            read_timeout,
         ));
         let mut from_stream = tokio_uring::spawn(copy(
             stream.clone(),
@@ -263,10 +266,16 @@ pub async fn io_loop(
             "TCP",
             "USB",
             file_bytes.clone(),
+            read_timeout,
         ));
 
         // Thread for monitoring transfer
-        let mut monitor = tokio::spawn(transfer_monitor(stats_interval, file_bytes, stream_bytes));
+        let mut monitor = tokio::spawn(transfer_monitor(
+            stats_interval,
+            file_bytes,
+            stream_bytes,
+            read_timeout,
+        ));
 
         // Stop as soon as one of them errors
         let res = tokio::try_join!(

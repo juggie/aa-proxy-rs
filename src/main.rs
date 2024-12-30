@@ -80,6 +80,10 @@ struct Args {
     /// so that the phone can remain connected (used in special configurations)
     #[clap(short, long)]
     keepalive: bool,
+
+    /// Data transfer timeout
+    #[clap(short, long, value_name = "SECONDS", default_value_t = 5)]
+    timeout_secs: u16,
 }
 
 #[derive(Clone)]
@@ -247,6 +251,7 @@ fn main() {
             Some(Duration::from_secs(args.stats_interval.into()))
         }
     };
+    let read_timeout = Duration::from_secs(args.timeout_secs.into());
 
     info!(
         "🛸 <b><blue>aa-proxy-rs</> is starting, build: {}, git: {}-{}",
@@ -283,6 +288,7 @@ fn main() {
         stats_interval,
         need_restart_cloned,
         tcp_start_cloned,
+        read_timeout,
     ));
 
     info!(

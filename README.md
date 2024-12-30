@@ -168,6 +168,9 @@ OPTIONS:
     -s, --stats-interval <SECONDS>
             Interval of showing data transfer statistics (0 = disabled) [default: 0]
 
+    -t, --timeout-secs <SECONDS>
+            Data transfer timeout [default: 5]
+
     -u, --udc <UDC>
             UDC Controller name
 
