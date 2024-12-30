@@ -176,28 +176,17 @@ fn logging_init(debug: bool, log_path: &PathBuf) {
     }
 }
 
-async fn tokio_main(
-    advertise: bool,
-    btalias: Option<String>,
-    legacy: bool,
-    iface: String,
-    hostapd_conf: PathBuf,
-    connect: Option<Address>,
-    udc: Option<String>,
-    keepalive: bool,
-    need_restart: Arc<Notify>,
-    tcp_start: Arc<Notify>,
-) {
+async fn tokio_main(args: Args, need_restart: Arc<Notify>, tcp_start: Arc<Notify>) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
-    if legacy {
+    if args.legacy {
         // start uevent listener in own task
         std::thread::spawn(|| uevent_listener(accessory_started_cloned));
     }
 
-    let wifi_conf = init_wifi_config(&iface, hostapd_conf);
-    let mut usb = UsbGadgetState::new(legacy, udc);
+    let wifi_conf = init_wifi_config(&args.iface, args.hostapd_conf);
+    let mut usb = UsbGadgetState::new(args.legacy, args.udc);
     loop {
         if let Err(e) = usb.init() {
             error!("{} 🔌 USB init error: {}", NAME, e);
@@ -206,12 +195,12 @@ async fn tokio_main(
         let bt_stop;
         loop {
             match bluetooth_setup_connection(
-                advertise,
-                btalias.clone(),
-                connect,
+                args.advertise,
+                args.btalias.clone(),
+                args.connect,
                 wifi_conf.clone(),
                 tcp_start.clone(),
-                keepalive,
+                args.keepalive,
             )
             .await
             {
@@ -287,21 +276,7 @@ fn main() {
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    runtime.spawn(async move {
-        tokio_main(
-            args.advertise,
-            args.btalias,
-            args.legacy,
-            args.iface,
-            args.hostapd_conf,
-            args.connect,
-            args.udc,
-            args.keepalive,
-            need_restart,
-            tcp_start,
-        )
-        .await
-    });
+    runtime.spawn(async move { tokio_main(args, need_restart, tcp_start).await });
 
     // start tokio_uring runtime simultaneously
     let _ = tokio_uring::start(io_loop(
