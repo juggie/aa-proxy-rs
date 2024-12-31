@@ -241,29 +241,6 @@ It should be also possible to `ssh` and execute:<br>
 `mount -o remount,rw /`<br>
 to make root filesystem read-write again temporarily.
 
-## Known problems
-During my development work I encountered the stuck USB adapter once. What is more interesting, a reboots doesn't help, I had to re-power cycle the Pi.
-In the `dmesg` I've got this:
-```
-Jan  1 00:00:02 buildroot kern.info kernel: [    1.775627] Bluetooth: hci0: BCM: chip id 94
-Jan  1 00:00:02 buildroot kern.info kernel: [    1.779290] Bluetooth: hci0: BCM: features 0x2e
-Jan  1 00:00:02 buildroot kern.info kernel: [    1.793222] Bluetooth: hci0: BCM43430A1
-Jan  1 00:00:02 buildroot kern.info kernel: [    1.795614] Bluetooth: hci0: BCM43430A1 (001.002.009) build 0000
-Jan  1 00:00:02 buildroot kern.info kernel: [    1.801062] Bluetooth: hci0: BCM43430A1 'brcm/BCM43430A1.raspberrypi,model-zero-2-w.hcd' Patch
-Jan  1 00:00:04 buildroot kern.info kernel: [    4.436283] Bluetooth: hci0: BCM: features 0x2e
-Jan  1 00:00:04 buildroot kern.err  kernel: [    4.438581] Bluetooth: hci0: Frame reassembly failed (-84)
-Jan  1 00:00:04 buildroot kern.warn kernel: [    4.438627] Bluetooth: hci0: Received unexpected HCI Event 0x00
-Jan  1 00:00:04 buildroot kern.err  kernel: [    4.440329] Bluetooth: hci0: Frame reassembly failed (-84)
-Jan  1 00:00:06 buildroot kern.err  kernel: [    6.473578] Bluetooth: hci0: command 0x0c14 tx timeout
-Jan  1 00:00:14 buildroot kern.err  kernel: [   14.553559] Bluetooth: hci0: BCM: Reading local name failed (-110)
-```
-And this was leading to problem with `aawgd`:
-```
-Jan  1 00:00:04 buildroot user.info aawgd[237]: Did not find any bluetooth adapters
-```
-As well as in aa-proxy-rs which cannot find bluetooth adapter.
-I didn't go further investigating this problem, only noticing.
-
 ## Similar projects
 - https://github.com/nisargjhaveri/WirelessAndroidAutoDongle
 - https://github.com/nisargjhaveri/AAWirelessGateway
