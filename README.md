@@ -45,8 +45,9 @@ I was also trying to call read/writes in tokio tasks, but finally I decided to u
 And this finally worked perfectly fine (and also really efficient as a bonus).
 
 ## Limitations
-Currently only the default "connection strategy" is supported.
-My time resources are limited, so don't expect to prompt answers and ETAs on different requests. I am doing this as a hobby in my spare time.
+- Currently only the default "connection strategy" is supported.
+- Because the project main functionality (data transfer) is dependent on kernel [io_uring](https://kernel.dk/io_uring.pdf) API, the Linux kernel has to be in version 5.10 or later.
+- My time resources are limited, so don't expect to prompt answers and ETAs on different requests. I am doing this as a hobby in my spare time.
 
 ## How it works (technical)
 ![Hardware overview](images/aa-proxy-rs.webp)
@@ -198,6 +199,7 @@ Sometimes deleting the system Bluetooth cache at /var/lib/bluetooth and restarti
 Consider also using "Forget" of bluetooth device in the Android phone.
 
 Application by default is logging into _/var/log/aa-proxy-rs.log_ file. This log could be helpful when trying to solve issues.
+If you want to get logs out of device, read [here](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle?tab=readme-ov-file#getting-logs) how to obtain it.
 
 ## Hardening / making system read-only
 Sometimes it is desirable (because of SD cards longevity) to make a whole system read-only. This would also help because we don't have any control when the car headunit is powering off the dongle (USB port).<br>
