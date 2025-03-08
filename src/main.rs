@@ -282,6 +282,7 @@ fn main() {
     let need_restart_cloned = need_restart.clone();
     let tcp_start = Arc::new(Notify::new());
     let tcp_start_cloned = tcp_start.clone();
+    let full_frames = args.full_frames;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -293,6 +294,7 @@ fn main() {
         need_restart_cloned,
         tcp_start_cloned,
         read_timeout,
+        full_frames,
     ));
 
     info!(

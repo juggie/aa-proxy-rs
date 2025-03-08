@@ -75,6 +75,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
     dbg_name_to: &'static str,
     bytes_written: Arc<AtomicUsize>,
     read_timeout: Duration,
+    full_frames: bool,
 ) -> Result<()> {
     let mut buf = vec![0u8; BUFFER_LEN];
     loop {
@@ -83,7 +84,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // which `Vec<u8>` implements!
         debug!("{}: before read", dbg_name_from);
         let slice = {
-            if dbg_name_from == "TCP" {
+            if full_frames {
                 // first: read only the header
                 buf.slice(..HEADER_LENGTH)
             } else {
@@ -104,7 +105,7 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         buf = buf_read.into_inner();
 
         // full message handling
-        if dbg_name_from == "TCP" {
+        if full_frames {
             if n != HEADER_LENGTH {
                 // this is unexpected
                 return Ok(());
@@ -253,6 +254,7 @@ pub async fn io_loop(
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
     read_timeout: Duration,
+    full_frames: bool,
 ) -> Result<()> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
@@ -319,6 +321,7 @@ pub async fn io_loop(
             "TCP",
             stream_bytes.clone(),
             read_timeout,
+            false,
         ));
         let mut from_stream = tokio_uring::spawn(copy(
             stream.clone(),
@@ -327,6 +330,7 @@ pub async fn io_loop(
             "USB",
             file_bytes.clone(),
             read_timeout,
+            full_frames,
         ));
 
         // Thread for monitoring transfer
