@@ -29,6 +29,12 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 const BUFFER_LEN: usize = 16 * 1024;
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
+// message related constants:
+const HEADER_LENGTH: usize = 4;
+const FRAME_TYPE_FIRST: u8 = 1 << 0;
+const FRAME_TYPE_LAST: u8 = 1 << 1;
+const FRAME_TYPE_MASK: u8 = FRAME_TYPE_FIRST | FRAME_TYPE_LAST;
+
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
 // read and write calls:
 // File is using read_at() and write_at(),
@@ -76,23 +82,74 @@ async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
         // it back, _even if there was an error_. There's a whole trait for that,
         // which `Vec<u8>` implements!
         debug!("{}: before read", dbg_name_from);
-        let retval = from.read(buf);
+        let slice = {
+            if dbg_name_from == "TCP" {
+                // first: read only the header
+                buf.slice(..HEADER_LENGTH)
+            } else {
+                buf.slice(..)
+            }
+        };
+        let retval = from.read(slice);
         let (res, buf_read) = timeout(read_timeout, retval)
             .await
             .map_err(|e| -> String { format!("{} read: {}", dbg_name_from, e) })?;
         // Propagate errors, see how many bytes we read
-        let n = res?;
+        let mut n = res?;
         debug!("{}: after read, {} bytes", dbg_name_from, n);
         if n == 0 {
             // A read of size zero signals EOF (end of file), finish gracefully
             return Ok(());
+        }
+        buf = buf_read.into_inner();
+
+        // full message handling
+        if dbg_name_from == "TCP" {
+            if n != HEADER_LENGTH {
+                // this is unexpected
+                return Ok(());
+            }
+            // compute message length
+            let mut message_length = (buf[3] as u16 + ((buf[2] as u16) << 8)) as usize;
+
+            if (buf[1] & FRAME_TYPE_MASK) == FRAME_TYPE_FIRST {
+                // This means the header is 8 bytes long, we need to read four more bytes.
+                message_length += 4;
+            }
+            if (HEADER_LENGTH + message_length) > BUFFER_LEN {
+                // Not enough space in the buffer. This is unexpected.
+                panic!("Not enough space in the buffer");
+            }
+
+            let mut remain = message_length;
+            // continue reading the rest of the message
+            while remain > 0 {
+                debug!(
+                    "{}: before read to end, computed message_length = {}, remain = {}",
+                    dbg_name_from, message_length, remain
+                );
+                let retval = from.read(buf.slice(n..n + remain));
+                let (res, chunk) = timeout(read_timeout, retval)
+                    .await
+                    .map_err(|e| -> String { format!("{} read to end: {}", dbg_name_from, e) })?;
+                // Propagate errors, see how many bytes we read
+                let len = res?;
+                debug!("{}: after read to end, {} bytes", dbg_name_from, len);
+                if len == 0 {
+                    // A read of size zero signals EOF (end of file), finish gracefully
+                    return Ok(());
+                }
+                remain -= len;
+                n += len;
+                buf = chunk.into_inner();
+            }
         }
 
         // The `slice` method here is implemented in an extension trait: it
         // returns an owned slice of our `Vec<u8>`, which we later turn back
         // into the full `Vec<u8>`
         debug!("{}: before write {} bytes", dbg_name_to, n);
-        let retval = to.write(buf_read.slice(..n)).submit();
+        let retval = to.write(buf.slice(..n)).submit();
         let (res, buf_write) = timeout(read_timeout, retval)
             .await
             .map_err(|e| -> String { format!("{} write: {}", dbg_name_to, e) })?;
