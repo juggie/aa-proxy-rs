@@ -84,6 +84,10 @@ struct Args {
     /// Data transfer timeout
     #[clap(short, long, value_name = "SECONDS", default_value_t = 10)]
     timeout_secs: u16,
+
+    /// Pass only complete frames during data transfer to the headunit
+    #[clap(short, long)]
+    full_frames: bool,
 }
 
 #[derive(Clone)]

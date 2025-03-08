@@ -128,7 +128,7 @@ Startup parameters (see below) are defined [here](https://github.com/manio/aa-pr
 
 ## Usage
 ```
-aa-proxy-rs 0.2.0
+aa-proxy-rs 0.3.0
 AndroidAuto wired/wireless proxy
 
 USAGE:
@@ -146,6 +146,9 @@ OPTIONS:
 
     -d, --debug
             Enable debug info
+
+    -f, --full-frames
+            Pass only complete frames during data transfer to the headunit
 
     -h, --help
             Print help information
