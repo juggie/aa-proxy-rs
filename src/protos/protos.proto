@@ -583,7 +583,7 @@ message WifiCredentialsResponse {
   optional WifiSecurityMode car_wifi_security_mode = 2;
   optional string car_wifi_ssid = 3;
   repeated int32 supported_wifi_channels = 4;
-  optional AccessPointType access_point_type = 5;
+  optional A_AccessPointType access_point_type = 5;
 }
 
 message RadioStateNotification {
@@ -1563,21 +1563,21 @@ enum BluetoothMessageId {
 }
 
 enum WifiSecurityMode {
-  UNKNOWN_SECURITY_MODE = 0;
-  OPEN = 1;
-  WEP_64 = 2;
-  WEP_128 = 3;
-  WPA_PERSONAL = 4;
-  WPA2_PERSONAL = 5;
-  WPA_WPA2_PERSONAL = 6;
-  WPA_ENTERPRISE = 7;
-  WPA2_ENTERPRISE = 8;
-  WPA_WPA2_ENTERPRISE = 9;
+  A_UNKNOWN_SECURITY_MODE = 0;
+  A_OPEN = 1;
+  A_WEP_64 = 2;
+  A_WEP_128 = 3;
+  A_WPA_PERSONAL = 4;
+  A_WPA2_PERSONAL = 5;
+  A_WPA_WPA2_PERSONAL = 6;
+  A_WPA_ENTERPRISE = 7;
+  A_WPA2_ENTERPRISE = 8;
+  A_WPA_WPA2_ENTERPRISE = 9;
 }
 
-enum AccessPointType {
-  STATIC = 0;
-  DYNAMIC = 1;
+enum A_AccessPointType {
+  A_STATIC = 0;
+  A_DYNAMIC = 1;
 }
 
 enum WifiProjectionMessageId {
