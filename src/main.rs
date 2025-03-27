@@ -1,5 +1,6 @@
 mod bluetooth;
 mod io_uring;
+mod mitm;
 mod usb_gadget;
 
 use bluer::Address;

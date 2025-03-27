@@ -6,7 +6,8 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Notify;
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::{mpsc, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
@@ -26,14 +27,16 @@ const NAME: &str = "<i><bright-black> proxy: </>";
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
-const BUFFER_LEN: usize = 16 * 1024;
+pub const BUFFER_LEN: usize = 16 * 1024;
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-// message related constants:
-const HEADER_LENGTH: usize = 4;
-const FRAME_TYPE_FIRST: u8 = 1 << 0;
-const FRAME_TYPE_LAST: u8 = 1 << 1;
-const FRAME_TYPE_MASK: u8 = FRAME_TYPE_FIRST | FRAME_TYPE_LAST;
+use crate::mitm::endpoint_reader;
+use crate::mitm::proxy;
+use crate::mitm::Packet;
+use crate::mitm::ProxyType;
+use crate::mitm::FRAME_TYPE_FIRST;
+use crate::mitm::FRAME_TYPE_MASK;
+use crate::mitm::HEADER_LENGTH;
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
 // read and write calls:
@@ -241,6 +244,12 @@ async fn transfer_monitor(
     }
 }
 
+async fn dummy_thread() -> Result<()> {
+    loop {
+        sleep(Duration::from_secs(3600)).await;
+    }
+}
+
 async fn flatten<T>(handle: &mut JoinHandle<Result<T>>) -> Result<T> {
     match handle.await {
         Ok(Ok(result)) => Ok(result),
@@ -313,25 +322,61 @@ pub async fn io_loop(
         let stream = Rc::new(stream);
         let stream_bytes = Arc::new(AtomicUsize::new(0));
 
-        // We need to copy in both directions...
-        let mut from_file = tokio_uring::spawn(copy(
-            file.clone(),
-            stream.clone(),
-            "USB",
-            "TCP",
-            stream_bytes.clone(),
-            read_timeout,
-            false,
-        ));
-        let mut from_stream = tokio_uring::spawn(copy(
-            stream.clone(),
-            file.clone(),
-            "TCP",
-            "USB",
-            file_bytes.clone(),
-            read_timeout,
-            full_frames,
-        ));
+        let mut from_file;
+        let mut from_stream;
+        let mut reader_hu;
+        let mut reader_md;
+        if true {
+            // MITM/proxy mpsc channels:
+            let (tx_hu, rx_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+            let (tx_md, rx_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+            let (txr_hu, rxr_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+            let (txr_md, rxr_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+
+            // dedicated reading threads:
+            reader_hu = tokio_uring::spawn(endpoint_reader(file.clone(), txr_hu));
+            reader_md = tokio_uring::spawn(endpoint_reader(stream.clone(), txr_md));
+            // main processing threads:
+            from_file = tokio_uring::spawn(proxy(
+                ProxyType::HeadUnit,
+                file.clone(),
+                stream_bytes.clone(),
+                tx_hu,
+                rx_hu,
+                rxr_md,
+            ));
+            from_stream = tokio_uring::spawn(proxy(
+                ProxyType::MobileDevice,
+                stream.clone(),
+                file_bytes.clone(),
+                tx_md,
+                rx_md,
+                rxr_hu,
+            ));
+        } else {
+            // We need to copy in both directions...
+            from_file = tokio_uring::spawn(copy(
+                file.clone(),
+                stream.clone(),
+                "USB",
+                "TCP",
+                stream_bytes.clone(),
+                read_timeout,
+                false,
+            ));
+            from_stream = tokio_uring::spawn(copy(
+                stream.clone(),
+                file.clone(),
+                "TCP",
+                "USB",
+                file_bytes.clone(),
+                read_timeout,
+                full_frames,
+            ));
+            // dummy threads which doesn't do anything:
+            reader_hu = tokio::spawn(dummy_thread());
+            reader_md = tokio::spawn(dummy_thread());
+        }
 
         // Thread for monitoring transfer
         let mut monitor = tokio::spawn(transfer_monitor(
@@ -343,6 +388,8 @@ pub async fn io_loop(
 
         // Stop as soon as one of them errors
         let res = tokio::try_join!(
+            flatten(&mut reader_hu),
+            flatten(&mut reader_md),
             flatten(&mut from_file),
             flatten(&mut from_stream),
             flatten(&mut monitor)
@@ -353,6 +400,8 @@ pub async fn io_loop(
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`
         // for each direction)
+        reader_hu.abort();
+        reader_md.abort();
         from_file.abort();
         from_stream.abort();
         monitor.abort();
