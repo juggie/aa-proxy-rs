@@ -1,5 +1,6 @@
 mod bluetooth;
 mod io_uring;
+mod mitm;
 mod usb_gadget;
 
 use bluer::Address;
@@ -88,6 +89,10 @@ struct Args {
     /// Pass only complete frames during data transfer to the headunit
     #[clap(short, long)]
     full_frames: bool,
+
+    /// Enable MITM mode (experimental, currently for testing only)
+    #[clap(short, long)]
+    mitm: bool,
 }
 
 #[derive(Clone)]
@@ -283,6 +288,7 @@ fn main() {
     let tcp_start = Arc::new(Notify::new());
     let tcp_start_cloned = tcp_start.clone();
     let full_frames = args.full_frames;
+    let mitm = args.mitm;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -295,6 +301,7 @@ fn main() {
         tcp_start_cloned,
         read_timeout,
         full_frames,
+        mitm,
     ));
 
     info!(

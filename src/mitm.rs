@@ -1,0 +1,397 @@
+use openssl::ssl::{Ssl, SslContextBuilder, SslFiletype, SslMethod};
+use simplelog::*;
+use std::collections::VecDeque;
+use std::io::{Read, Write};
+use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Duration;
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::timeout;
+use tokio_uring::buf::BoundedBuf;
+
+// protobuf stuff:
+include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+use protos::ControlMessageType;
+
+use crate::io_uring::Endpoint;
+use crate::io_uring::BUFFER_LEN;
+
+// module name for logging engine
+const NAME: &str = "<i><bright-black> mitm: </>";
+
+// Just a generic Result type to ease error handling for us. Errors in multithreaded
+// async contexts needs some extra restrictions
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+// message related constants:
+pub const HEADER_LENGTH: usize = 4;
+pub const FRAME_TYPE_FIRST: u8 = 1 << 0;
+pub const FRAME_TYPE_LAST: u8 = 1 << 1;
+pub const FRAME_TYPE_MASK: u8 = FRAME_TYPE_FIRST | FRAME_TYPE_LAST;
+const _CONTROL: u8 = 1 << 2;
+pub const ENCRYPTED: u8 = 1 << 3;
+
+// location for hu_/md_ private keys and certificates:
+const KEYS_PATH: &str = "/etc/aa-proxy-rs";
+
+#[derive(PartialEq, Copy, Clone)]
+pub enum ProxyType {
+    HeadUnit,
+    MobileDevice,
+}
+
+/// rust-openssl doesn't support BIO_s_mem
+/// This SslMemBuf is about to provide `Read` and `Write` implementations
+/// to be used with `openssl::ssl::SslStream`
+/// more info:
+/// https://github.com/sfackler/rust-openssl/issues/1697
+type LocalDataBuffer = Arc<Mutex<VecDeque<u8>>>;
+#[derive(Clone)]
+pub struct SslMemBuf {
+    /// a data buffer that the server writes to and the client reads from
+    pub server_stream: LocalDataBuffer,
+    /// a data buffer that the client writes to and the server reads from
+    pub client_stream: LocalDataBuffer,
+}
+
+// Read implementation used internally by OpenSSL
+impl Read for SslMemBuf {
+    fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+        let result = self.client_stream.lock().unwrap().read(buf);
+        if let Ok(0) = result {
+            // Treat no data as blocking instead of EOF
+            Err(std::io::Error::new(
+                std::io::ErrorKind::WouldBlock,
+                "blocking",
+            ))
+        } else {
+            result
+        }
+    }
+}
+
+// Write implementation used internally by OpenSSL
+impl Write for SslMemBuf {
+    fn write(&mut self, buf: &[u8]) -> std::result::Result<usize, std::io::Error> {
+        self.server_stream.lock().unwrap().write(buf)
+    }
+
+    fn flush(&mut self) -> std::result::Result<(), std::io::Error> {
+        self.server_stream.lock().unwrap().flush()
+    }
+}
+
+// Own functions for accessing shared data
+impl SslMemBuf {
+    fn read_to(&mut self, buf: &mut Vec<u8>) -> std::result::Result<usize, std::io::Error> {
+        let result = self.server_stream.lock().unwrap().read_to_end(buf);
+        if let Ok(0) = result {
+            // Treat no data as blocking instead of EOF
+            Err(std::io::Error::new(
+                std::io::ErrorKind::WouldBlock,
+                "blocking",
+            ))
+        } else {
+            result
+        }
+    }
+    fn write_from(&mut self, buf: &[u8]) -> std::result::Result<usize, std::io::Error> {
+        self.client_stream.lock().unwrap().write(buf)
+    }
+}
+
+pub struct Packet {
+    channel: u8,
+    flags: u8,
+    final_length: Option<u32>,
+    payload: Vec<u8>,
+}
+
+impl Packet {
+    /// payload encryption if needed
+    async fn encrypt_payload(
+        &mut self,
+        mem_buf: &mut SslMemBuf,
+        server: &mut openssl::ssl::SslStream<SslMemBuf>,
+    ) -> Result<()> {
+        if (self.flags & ENCRYPTED) == ENCRYPTED {
+            // save plain data for encryption
+            let _ = server.ssl_write(&self.payload);
+            // read encrypted data
+            let mut res: Vec<u8> = Vec::new();
+            let _ = mem_buf.read_to(&mut res);
+            self.payload = res;
+        }
+
+        Ok(())
+    }
+
+    /// payload decryption if needed
+    async fn decrypt_payload(
+        &mut self,
+        mem_buf: &mut SslMemBuf,
+        server: &mut openssl::ssl::SslStream<SslMemBuf>,
+    ) -> Result<()> {
+        if (self.flags & ENCRYPTED) == ENCRYPTED {
+            // save encrypted data
+            let _ = mem_buf.write_from(&self.payload);
+            // read plain data
+            let mut res: Vec<u8> = Vec::new();
+            let _ = server.read_to_end(&mut res);
+            self.payload = res;
+        }
+
+        Ok(())
+    }
+
+    /// composes a final frame and transmits it to endpoint device (HU/MD)
+    async fn transmit<A: Endpoint<A>>(&self, device: &mut Rc<A>) -> Result<()> {
+        let len = self.payload.len() as u16;
+        let mut frame: Vec<u8> = vec![];
+        frame.push(self.channel);
+        frame.push(self.flags);
+        frame.push((len >> 8) as u8);
+        frame.push((len & 0xff) as u8);
+        if let Some(final_len) = self.final_length {
+            // adding addional 4-bytes of final_len header
+            frame.push((final_len >> 24) as u8);
+            frame.push((final_len >> 16) as u8);
+            frame.push((final_len >> 8) as u8);
+            frame.push((final_len & 0xff) as u8);
+        }
+        frame.append(&mut self.payload.clone());
+        let _ = device.write(frame).submit().await;
+
+        Ok(())
+    }
+
+    /// decapsulates SSL payload and writes to SslStream
+    async fn ssl_decapsulate_write(&self, mem_buf: &mut SslMemBuf) -> Result<()> {
+        let message_type = u16::from_be_bytes(self.payload[0..=1].try_into()?);
+        if message_type == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as u16 {
+            mem_buf.write_from(&self.payload[2..])?;
+        }
+        Ok(())
+    }
+}
+
+/// encapsulates SSL data into Packet and transmits
+async fn ssl_encapsulate_transmit<A: Endpoint<A>>(
+    device: &mut Rc<A>,
+    mut mem_buf: SslMemBuf,
+) -> Result<()> {
+    // read SSL-generated data
+    let mut res: Vec<u8> = Vec::new();
+    let _ = mem_buf.read_to(&mut res);
+
+    // create MESSAGE_ENCAPSULATED_SSL Packet
+    let message_type = ControlMessageType::MESSAGE_ENCAPSULATED_SSL as u16;
+    res.insert(0, (message_type >> 8) as u8);
+    res.insert(1, (message_type & 0xff) as u8);
+    let pkt = Packet {
+        channel: 0x00,
+        flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+        final_length: None,
+        payload: res,
+    };
+    // transmit to device
+    pkt.transmit(device).await?;
+
+    Ok(())
+}
+
+/// creates Ssl for HeadUnit (SSL server) and MobileDevice (SSL client)
+async fn ssl_builder(proxy_type: ProxyType) -> Result<Ssl> {
+    let mut ctx_builder = SslContextBuilder::new(SslMethod::tls())?;
+
+    // for HU/headunit we need to act as a MD/mobiledevice, so load "md" key and cert
+    // and vice versa
+    let prefix = match proxy_type {
+        ProxyType::HeadUnit => "md",
+        ProxyType::MobileDevice => "hu",
+    };
+    ctx_builder.set_certificate_file(format!("{KEYS_PATH}/{prefix}_cert.pem"), SslFiletype::PEM)?;
+    ctx_builder.set_private_key_file(format!("{KEYS_PATH}/{prefix}_key.pem"), SslFiletype::PEM)?;
+    ctx_builder.check_private_key()?;
+    // trusted root certificates:
+    ctx_builder.set_ca_file(format!("{KEYS_PATH}/galroot_cert.pem"))?;
+
+    ctx_builder.set_min_proto_version(Some(openssl::ssl::SslVersion::TLS1_2))?;
+    ctx_builder.set_options(openssl::ssl::SslOptions::NO_TLSV1_3);
+    if proxy_type == ProxyType::HeadUnit {
+        ctx_builder.set_cipher_list("ECDHE-RSA-AES128-GCM-SHA256")?;
+    }
+
+    let openssl_ctx = ctx_builder.build();
+    let mut ssl = Ssl::new(&openssl_ctx)?;
+    if proxy_type == ProxyType::HeadUnit {
+        ssl.set_accept_state(); // SSL server
+    } else if proxy_type == ProxyType::MobileDevice {
+        ssl.set_connect_state(); // SSL client
+    }
+
+    Ok(ssl)
+}
+
+/// reads all available data to VecDeque
+async fn read_input_data<A: Endpoint<A>>(rbuf: &mut VecDeque<u8>, device: Rc<A>) -> Result<()> {
+    let newdata = vec![0u8; BUFFER_LEN];
+    let retval = device.read(newdata);
+    let (n, newdata) = timeout(Duration::from_millis(15000), retval)
+        .await
+        .map_err(|_| -> String { format!("read_input_data: timeout") })?;
+    let n = n?;
+    if n > 0 {
+        rbuf.write(&newdata.slice(..n))?;
+    }
+    Ok(())
+}
+
+/// main reader thread for a device
+pub async fn endpoint_reader<A: Endpoint<A>>(device: Rc<A>, tx: Sender<Packet>) -> Result<()> {
+    let mut rbuf: VecDeque<u8> = VecDeque::new();
+    loop {
+        read_input_data(&mut rbuf, device.clone()).await?;
+        // check if we have complete packet available
+        loop {
+            if rbuf.len() > HEADER_LENGTH {
+                let channel = rbuf[0];
+                let flags = rbuf[1];
+                let mut header_size = HEADER_LENGTH;
+                let mut final_length = None;
+                let payload_size = (rbuf[3] as u16 + ((rbuf[2] as u16) << 8)) as usize;
+                if rbuf.len() > 8 && (flags & FRAME_TYPE_MASK) == FRAME_TYPE_FIRST {
+                    header_size += 4;
+                    final_length = Some(
+                        ((rbuf[4] as u32) << 24)
+                            + ((rbuf[5] as u32) << 16)
+                            + ((rbuf[6] as u32) << 8)
+                            + (rbuf[7] as u32),
+                    );
+                }
+                let frame_size = header_size + payload_size;
+                if rbuf.len() >= frame_size {
+                    let mut frame = vec![0u8; frame_size];
+                    rbuf.read_exact(&mut frame)?;
+                    // we now have all header data analyzed/read, so remove
+                    // the header from frame to have payload only left
+                    frame.drain(..header_size);
+                    let pkt = Packet {
+                        channel,
+                        flags,
+                        final_length,
+                        payload: frame,
+                    };
+                    // send packet to main thread for further process
+                    tx.send(pkt).await?;
+                    // check if we have another packet
+                    continue;
+                }
+            }
+            // no more complete packets available
+            break;
+        }
+    }
+}
+
+/// main thread doing all packet processing of an endpoint/device
+pub async fn proxy<A: Endpoint<A> + 'static>(
+    proxy_type: ProxyType,
+    mut device: Rc<A>,
+    bytes_written: Arc<AtomicUsize>,
+    tx: Sender<Packet>,
+    mut rx: Receiver<Packet>,
+    mut rxr: Receiver<Packet>,
+) -> Result<()> {
+    let ssl = ssl_builder(proxy_type).await?;
+
+    let mut mem_buf = SslMemBuf {
+        client_stream: Arc::new(Mutex::new(VecDeque::new())),
+        server_stream: Arc::new(Mutex::new(VecDeque::new())),
+    };
+    let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
+
+    // initial phase: passing version and doing SSL handshake
+    // for both HU and MD
+    if proxy_type == ProxyType::HeadUnit {
+        // waiting for initial version frame (HU is starting transmission)
+        let Some(pkt) = rxr.recv().await else { todo!() };
+        // sending to the MD
+        tx.send(pkt).await?;
+        // waiting for MD reply
+        let Some(pkt) = rx.recv().await else { todo!() };
+        // sending reply back to the HU
+        pkt.transmit(&mut device).await?;
+
+        // doing SSL handshake
+        const STEPS: u8 = 2;
+        for i in 1..=STEPS {
+            let Some(pkt) = rxr.recv().await else { todo!() };
+            pkt.ssl_decapsulate_write(&mut mem_buf).await?;
+            let _ = server.accept();
+            info!(
+                "{} 🔒 stage #{} of {}: SSL handshake: {}",
+                NAME,
+                i,
+                STEPS,
+                server.ssl().state_string_long()
+            );
+            ssl_encapsulate_transmit(&mut device, mem_buf.clone()).await?;
+        }
+    } else if proxy_type == ProxyType::MobileDevice {
+        // expecting version request from the HU here...
+        let Some(pkt) = rx.recv().await else { todo!() };
+        // sending to the MD
+        pkt.transmit(&mut device).await?;
+        // waiting for MD reply
+        let Some(pkt) = rxr.recv().await else { todo!() };
+        // sending reply back to the HU
+        tx.send(pkt).await?;
+
+        // doing SSL handshake
+        const STEPS: u8 = 3;
+        for i in 1..=STEPS {
+            let _ = server.do_handshake();
+            info!(
+                "{} 🔒 stage #{} of {}: SSL handshake: {}",
+                NAME,
+                i,
+                STEPS,
+                server.ssl().state_string_long()
+            );
+            if i == 3 {
+                // this was the last handshake step, need to break here
+                break;
+            };
+            ssl_encapsulate_transmit(&mut device, mem_buf.clone()).await?;
+            let Some(pkt) = rxr.recv().await else { todo!() };
+            pkt.ssl_decapsulate_write(&mut mem_buf).await?;
+        }
+    }
+
+    // main data processing/transfer loop
+    loop {
+        // handling data from opposite device's thread, which needs to be transmitted
+        if let Ok(mut pkt) = rx.try_recv() {
+            pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
+            pkt.transmit(&mut device).await?;
+
+            // Increment byte counters for statistics
+            // fixme: compute final_len for precise stats
+            bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
+        };
+
+        // handling input data from the reader thread
+        if let Ok(mut pkt) = rxr.try_recv() {
+            match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
+                Ok(_) => {
+                    tx.send(pkt).await?;
+                }
+                Err(e) => error!("decrypt_payload: {:?}", e),
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
