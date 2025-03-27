@@ -264,6 +264,7 @@ pub async fn io_loop(
     tcp_start: Arc<Notify>,
     read_timeout: Duration,
     full_frames: bool,
+    mitm: bool,
 ) -> Result<()> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
@@ -326,7 +327,7 @@ pub async fn io_loop(
         let mut from_stream;
         let mut reader_hu;
         let mut reader_md;
-        if true {
+        if mitm {
             // MITM/proxy mpsc channels:
             let (tx_hu, rx_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
             let (tx_md, rx_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
