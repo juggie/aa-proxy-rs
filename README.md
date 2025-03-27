@@ -10,6 +10,7 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
 - reconnecting: trying to reconnect/recover AndroidAuto connection in any possible case
 - bandwidth/transfer statistics
 - stall transfer detection
+- MITM (man-in-the-middle) mode support
 
 ## Current project status
 Now after a lot of stress-testing and coding I think the project has matured enough, that I can say that the main stability goal was reached.
@@ -169,11 +170,14 @@ OPTIONS:
     -l, --logfile <LOGFILE>
             Log file path [default: /var/log/aa-proxy-rs.log]
 
+    -m, --mitm
+            Enable MITM mode (experimental, currently for testing only)
+
     -s, --stats-interval <SECONDS>
             Interval of showing data transfer statistics (0 = disabled) [default: 0]
 
     -t, --timeout-secs <SECONDS>
-            Data transfer timeout [default: 5]
+            Data transfer timeout [default: 10]
 
     -u, --udc <UDC>
             UDC Controller name
@@ -196,6 +200,28 @@ If you provide `-c` switch without any additional address, then the daemon is tr
 (the **bluetoothd** have a cached list of recently connected devices in /var/lib/bluetooth). This is the default mode for `aawgd` for the time I am writing this.<br>
 If you provide `-c MAC_ADDRESS` where MAC_ADDRESS is the MAC of your phone (bluetooth), then the aa-proxy-rs will try to connect only to this specified device
 in a loop (ignoring all **bluetoothd** cached devices).
+
+## MITM mode
+Man-in-the-middle mode support has been added recently. This is the mode which allows to change the data passed between the HU and the phone.
+Separate encrypted connections are made to each device to be able to see or modify the data passed between HU and MD.<br>
+This is opening new possibilities like, e.g., forcing HU to specific DPI, adding EV capabilities to HU/cars which doesn't support this Google Maps feature.<br>
+All the above is not currently supported but should be possible and easier with this mode now implemented.<br>
+To have this mode working you need to pass `-m, --mitm` command line switch and provide certificate and private key for communication for both ends/devices.
+Default directory where the keys are search for is: `/etc/aa-proxy-rs/`, and the following file set needs to be there:<br>
+- hu_key.pem
+- hu_cert.pem
+- md_key.pem
+- md_cert.pem
+- galroot_cert.pem
+
+I will not add these files into this repository to avoid potential problems. You can find it in other places, or even other git repos, like:<br>
+- https://github.com/tomasz-grobelny/AACS/tree/master/AAServer/ssl
+- https://github.com/tomasz-grobelny/AACS/tree/master/AAClient/ssl
+- https://github.com/lucalewin/vehiculum/tree/main/src/server/cert
+- https://github.com/lucalewin/vehiculum/tree/main/src/client/cert
+- https://github.com/borconi/headunit/blob/master/jni/hu_ssl.h#L29
+
+Special thanks to [@gamelaster](https://github.com/gamelaster/) for the help, support and his [OpenGAL Proxy](https://github.com/gamelaster/opengal_proxy) project.
 
 ## Troubleshooting
 Sometimes deleting the system Bluetooth cache at /var/lib/bluetooth and restarting bluetoothd fixes persistent issues with device connectivity.
