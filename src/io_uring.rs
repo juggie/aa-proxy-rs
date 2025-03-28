@@ -333,7 +333,7 @@ pub async fn io_loop(
         let mut from_stream;
         let mut reader_hu;
         let mut reader_md;
-        if mitm {
+        if mitm || full_frames {
             // MITM/proxy mpsc channels:
             let (tx_hu, rx_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
             let (tx_md, rx_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
@@ -357,6 +357,7 @@ pub async fn io_loop(
                 disable_tts_sink,
                 remove_tap_restriction,
                 video_in_motion,
+                full_frames,
             ));
             from_stream = tokio_uring::spawn(proxy(
                 ProxyType::MobileDevice,
@@ -371,6 +372,7 @@ pub async fn io_loop(
                 disable_tts_sink,
                 remove_tap_restriction,
                 video_in_motion,
+                full_frames,
             ));
         } else {
             // We need to copy in both directions...

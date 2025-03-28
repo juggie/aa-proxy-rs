@@ -531,7 +531,28 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     disable_tts_sink: bool,
     remove_tap_restriction: bool,
     video_in_motion: bool,
+    passthrough: bool,
 ) -> Result<()> {
+    // in full_frames/passthrough mode we only directly pass packets from one endpoint to the other
+    if passthrough {
+        loop {
+            // handling data from opposite device's thread, which needs to be transmitted
+            if let Ok(pkt) = rx.try_recv() {
+                pkt.transmit(&mut device).await?;
+
+                // Increment byte counters for statistics
+                // fixme: compute final_len for precise stats
+                bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
+            };
+
+            // handling input data from the reader thread
+            if let Ok(pkt) = rxr.try_recv() {
+                tx.send(pkt).await?;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
     let ssl = ssl_builder(proxy_type).await?;
 
     let mut mem_buf = SslMemBuf {
