@@ -1,3 +1,4 @@
+use log::log_enabled;
 use openssl::ssl::{Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
 use std::collections::VecDeque;
@@ -13,7 +14,10 @@ use tokio_uring::buf::BoundedBuf;
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
-use protos::ControlMessageType;
+use crate::mitm::protos::*;
+use protobuf::text_format::print_to_string_pretty;
+use protobuf::{Enum, Message, MessageDyn};
+use protos::ControlMessageType::{self, *};
 
 use crate::io_uring::Endpoint;
 use crate::io_uring::BUFFER_LEN;
@@ -177,6 +181,41 @@ impl Packet {
     }
 }
 
+/// shows packet/message contents as pretty string for debug
+pub async fn pkt_debug(payload: &[u8]) -> Result<()> {
+    // don't run further if we are not in Debug mode
+    if !log_enabled!(Level::Debug) {
+        return Ok(());
+    }
+
+    // message_id is the first 2 bytes of payload
+    let message_id: i32 = u16::from_be_bytes(payload[0..=1].try_into()?).into();
+
+    // trying to obtain an Enum from message_id
+    let control = protos::ControlMessageType::from_i32(message_id);
+    debug!("message_id = {:04X}, {:?}", message_id, control);
+
+    // parsing data
+    let data = &payload[2..]; // start of message data
+    let message: &dyn MessageDyn = match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+        MESSAGE_AUTH_COMPLETE => &AuthResponse::parse_from_bytes(data)?,
+        MESSAGE_SERVICE_DISCOVERY_REQUEST => &ServiceDiscoveryRequest::parse_from_bytes(data)?,
+        MESSAGE_SERVICE_DISCOVERY_RESPONSE => &ServiceDiscoveryResponse::parse_from_bytes(data)?,
+        MESSAGE_PING_REQUEST => &PingRequest::parse_from_bytes(data)?,
+        MESSAGE_PING_RESPONSE => &PingResponse::parse_from_bytes(data)?,
+        MESSAGE_NAV_FOCUS_REQUEST => &NavFocusRequestNotification::parse_from_bytes(data)?,
+        MESSAGE_CHANNEL_OPEN_RESPONSE => &ChannelOpenResponse::parse_from_bytes(data)?,
+        MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
+        MESSAGE_AUDIO_FOCUS_REQUEST => &AudioFocusRequestNotification::parse_from_bytes(data)?,
+        MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
+        _ => return Ok(()),
+    };
+    // show pretty string from the message
+    debug!("{}", print_to_string_pretty(message));
+
+    Ok(())
+}
+
 /// encapsulates SSL data into Packet and transmits
 async fn ssl_encapsulate_transmit<A: Endpoint<A>>(
     device: &mut Rc<A>,
@@ -318,6 +357,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if proxy_type == ProxyType::HeadUnit {
         // waiting for initial version frame (HU is starting transmission)
         let Some(pkt) = rxr.recv().await else { todo!() };
+        let _ = pkt_debug(&pkt.payload).await;
         // sending to the MD
         tx.send(pkt).await?;
         // waiting for MD reply
@@ -347,6 +387,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         pkt.transmit(&mut device).await?;
         // waiting for MD reply
         let Some(pkt) = rxr.recv().await else { todo!() };
+        let _ = pkt_debug(&pkt.payload).await;
         // sending reply back to the HU
         tx.send(pkt).await?;
 
@@ -387,6 +428,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         if let Ok(mut pkt) = rxr.try_recv() {
             match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
                 Ok(_) => {
+                    let _ = pkt_debug(&pkt.payload).await;
                     tx.send(pkt).await?;
                 }
                 Err(e) => error!("decrypt_payload: {:?}", e),
