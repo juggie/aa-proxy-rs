@@ -148,6 +148,9 @@ OPTIONS:
     -d, --debug
             Enable debug info
 
+        --dpi <DPI>
+            Force DPI (experimental)
+
     -f, --full-frames
             Pass only complete frames during data transfer to the headunit
 
@@ -171,7 +174,7 @@ OPTIONS:
             Log file path [default: /var/log/aa-proxy-rs.log]
 
     -m, --mitm
-            Enable MITM mode (experimental, currently for testing only)
+            Enable MITM mode (experimental)
 
     -s, --stats-interval <SECONDS>
             Interval of showing data transfer statistics (0 = disabled) [default: 0]
@@ -222,6 +225,14 @@ I will not add these files into this repository to avoid potential problems. You
 - https://github.com/borconi/headunit/blob/master/jni/hu_ssl.h#L29
 
 Special thanks to [@gamelaster](https://github.com/gamelaster/) for the help, support and his [OpenGAL Proxy](https://github.com/gamelaster/opengal_proxy) project.
+
+### DPI settings
+Thanks to above MITM mode a DPI setting of the car HU can be forced/replaced. This way we can change the hardcoded value to our own. This is allowing to view more data (at cost of readability/font size).<br>
+Example with Google Maps, where a `Report` button is available after changing this value:
+
+|160 DPI (default)|130 DPI|
+|---|---|
+|![](images/160dpi.png)|![](images/130dpi.png)
 
 ## Troubleshooting
 Sometimes deleting the system Bluetooth cache at /var/lib/bluetooth and restarting bluetoothd fixes persistent issues with device connectivity.
