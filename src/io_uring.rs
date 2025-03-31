@@ -265,6 +265,7 @@ pub async fn io_loop(
     read_timeout: Duration,
     full_frames: bool,
     mitm: bool,
+    dpi: u16,
 ) -> Result<()> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
@@ -345,6 +346,7 @@ pub async fn io_loop(
                 tx_hu,
                 rx_hu,
                 rxr_md,
+                dpi,
             ));
             from_stream = tokio_uring::spawn(proxy(
                 ProxyType::MobileDevice,
@@ -353,6 +355,7 @@ pub async fn io_loop(
                 tx_md,
                 rx_md,
                 rxr_hu,
+                dpi,
             ));
         } else {
             // We need to copy in both directions...

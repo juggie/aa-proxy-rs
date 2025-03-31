@@ -90,9 +90,13 @@ struct Args {
     #[clap(short, long)]
     full_frames: bool,
 
-    /// Enable MITM mode (experimental, currently for testing only)
+    /// Enable MITM mode (experimental)
     #[clap(short, long)]
     mitm: bool,
+
+    /// Force DPI (experimental)
+    #[clap(long, requires("mitm"))]
+    dpi: u16,
 }
 
 #[derive(Clone)]
@@ -289,6 +293,7 @@ fn main() {
     let tcp_start_cloned = tcp_start.clone();
     let full_frames = args.full_frames;
     let mitm = args.mitm;
+    let dpi = args.dpi;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -302,6 +307,7 @@ fn main() {
         read_timeout,
         full_frames,
         mitm,
+        dpi,
     ));
 
     info!(
