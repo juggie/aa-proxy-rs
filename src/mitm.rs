@@ -216,6 +216,41 @@ pub async fn pkt_debug(payload: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// packet modification hook
+pub async fn pkt_modify_hook(pkt: &mut Packet) -> Result<()> {
+    if pkt.channel != 0 {
+        return Ok(());
+    }
+
+    // message_id is the first 2 bytes of payload
+    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+
+    // trying to obtain an Enum from message_id
+    let control = protos::ControlMessageType::from_i32(message_id);
+    debug!("message_id = {:04X}, {:?}", message_id, control);
+
+    // parsing data
+    let data = &pkt.payload[2..]; // start of message data
+    match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+        MESSAGE_SERVICE_DISCOVERY_RESPONSE => {
+            let mut msg = ServiceDiscoveryResponse::parse_from_bytes(data)?;
+            msg.services[0]
+                .media_sink_service
+                .as_mut()
+                .unwrap()
+                .video_configs[0]
+                .set_density(80);
+            pkt.payload = msg.write_to_bytes()?;
+            // inserting 2 bytes of message_id at the beginning
+            pkt.payload.insert(0, (message_id >> 8) as u8);
+            pkt.payload.insert(1, (message_id & 0xff) as u8);
+        }
+        _ => return Ok(()),
+    };
+
+    Ok(())
+}
+
 /// encapsulates SSL data into Packet and transmits
 async fn ssl_encapsulate_transmit<A: Endpoint<A>>(
     device: &mut Rc<A>,
@@ -416,6 +451,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
         if let Ok(mut pkt) = rx.try_recv() {
+            pkt_modify_hook(&mut pkt).await?;
             pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
             pkt.transmit(&mut device).await?;
 
