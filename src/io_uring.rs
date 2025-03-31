@@ -265,7 +265,7 @@ pub async fn io_loop(
     read_timeout: Duration,
     full_frames: bool,
     mitm: bool,
-    dpi: u16,
+    dpi: Option<u16>,
 ) -> Result<()> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();

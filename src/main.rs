@@ -96,7 +96,7 @@ struct Args {
 
     /// Force DPI (experimental)
     #[clap(long, requires("mitm"))]
-    dpi: u16,
+    dpi: Option<u16>,
 }
 
 #[derive(Clone)]

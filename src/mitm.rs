@@ -389,7 +389,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     tx: Sender<Packet>,
     mut rx: Receiver<Packet>,
     mut rxr: Receiver<Packet>,
-    dpi: u16,
+    dpi: Option<u16>,
 ) -> Result<()> {
     let ssl = ssl_builder(proxy_type).await?;
 
@@ -463,7 +463,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
         if let Ok(mut pkt) = rx.try_recv() {
-            pkt_modify_hook(&mut pkt, dpi).await?;
+            if let Some(dpi) = dpi {
+                pkt_modify_hook(&mut pkt, dpi).await?;
+            }
             pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
             pkt.transmit(&mut device).await?;
 
