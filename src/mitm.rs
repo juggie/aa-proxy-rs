@@ -403,19 +403,19 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     // for both HU and MD
     if proxy_type == ProxyType::HeadUnit {
         // waiting for initial version frame (HU is starting transmission)
-        let Some(pkt) = rxr.recv().await else { todo!() };
+        let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
         let _ = pkt_debug(&pkt.payload).await;
         // sending to the MD
         tx.send(pkt).await?;
         // waiting for MD reply
-        let Some(pkt) = rx.recv().await else { todo!() };
+        let pkt = rx.recv().await.ok_or("rx channel hung up")?;
         // sending reply back to the HU
         pkt.transmit(&mut device).await?;
 
         // doing SSL handshake
         const STEPS: u8 = 2;
         for i in 1..=STEPS {
-            let Some(pkt) = rxr.recv().await else { todo!() };
+            let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
             let _ = server.accept();
             info!(
@@ -429,11 +429,11 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         }
     } else if proxy_type == ProxyType::MobileDevice {
         // expecting version request from the HU here...
-        let Some(pkt) = rx.recv().await else { todo!() };
+        let pkt = rx.recv().await.ok_or("rx channel hung up")?;
         // sending to the MD
         pkt.transmit(&mut device).await?;
         // waiting for MD reply
-        let Some(pkt) = rxr.recv().await else { todo!() };
+        let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
         let _ = pkt_debug(&pkt.payload).await;
         // sending reply back to the HU
         tx.send(pkt).await?;
@@ -454,7 +454,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 break;
             };
             ssl_encapsulate_transmit(&mut device, mem_buf.clone()).await?;
-            let Some(pkt) = rxr.recv().await else { todo!() };
+            let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
         }
     }
