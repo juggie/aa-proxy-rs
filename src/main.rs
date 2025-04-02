@@ -94,9 +94,13 @@ struct Args {
     #[clap(short, long)]
     mitm: bool,
 
-    /// Force DPI (experimental)
+    /// MITM: Force DPI (experimental)
     #[clap(long, requires("mitm"))]
     dpi: Option<u16>,
+
+    /// MITM: Developer mode
+    #[clap(long, requires("mitm"))]
+    developer_mode: bool,
 }
 
 #[derive(Clone)]
@@ -294,6 +298,7 @@ fn main() {
     let full_frames = args.full_frames;
     let mitm = args.mitm;
     let dpi = args.dpi;
+    let developer_mode = args.developer_mode;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -308,6 +313,7 @@ fn main() {
         full_frames,
         mitm,
         dpi,
+        developer_mode,
     ));
 
     info!(

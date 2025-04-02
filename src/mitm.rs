@@ -217,7 +217,11 @@ pub async fn pkt_debug(payload: &[u8]) -> Result<()> {
 }
 
 /// packet modification hook
-pub async fn pkt_modify_hook(pkt: &mut Packet, new_dpi: u16) -> Result<()> {
+pub async fn pkt_modify_hook(
+    pkt: &mut Packet,
+    dpi: Option<u16>,
+    developer_mode: bool,
+) -> Result<()> {
     if pkt.channel != 0 {
         return Ok(());
     }
@@ -234,22 +238,38 @@ pub async fn pkt_modify_hook(pkt: &mut Packet, new_dpi: u16) -> Result<()> {
     match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
         MESSAGE_SERVICE_DISCOVERY_RESPONSE => {
             let mut msg = ServiceDiscoveryResponse::parse_from_bytes(data)?;
-            // get previous/original value
-            let prev_val = msg.services[0].media_sink_service.video_configs[0].density();
-            // set new value
-            msg.services[0]
-                .media_sink_service
-                .as_mut()
-                .unwrap()
-                .video_configs[0]
-                .set_density(new_dpi.into());
-            info!(
-                "{} <yellow>{:?}</> Replacing DPI value: from <b>{}</> to <b>{}</>",
-                NAME,
-                control.unwrap(),
-                prev_val,
-                new_dpi
-            );
+
+            // DPI
+            if let Some(new_dpi) = dpi {
+                // get previous/original value
+                let prev_val = msg.services[0].media_sink_service.video_configs[0].density();
+                // set new value
+                msg.services[0]
+                    .media_sink_service
+                    .as_mut()
+                    .unwrap()
+                    .video_configs[0]
+                    .set_density(new_dpi.into());
+                info!(
+                    "{} <yellow>{:?}</>: replacing DPI value: from <b>{}</> to <b>{}</>",
+                    NAME,
+                    control.unwrap(),
+                    prev_val,
+                    new_dpi
+                );
+            }
+
+            // enabling developer mode
+            if developer_mode {
+                msg.set_make("Google".into());
+                msg.set_model("Desktop Head Unit".into());
+                info!(
+                    "{} <yellow>{:?}</>: enabling developer mode",
+                    NAME,
+                    control.unwrap(),
+                );
+            }
+
             // rewrite payload to new message contents
             pkt.payload = msg.write_to_bytes()?;
             // inserting 2 bytes of message_id at the beginning
@@ -390,6 +410,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     mut rx: Receiver<Packet>,
     mut rxr: Receiver<Packet>,
     dpi: Option<u16>,
+    developer_mode: bool,
 ) -> Result<()> {
     let ssl = ssl_builder(proxy_type).await?;
 
@@ -463,9 +484,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
         if let Ok(mut pkt) = rx.try_recv() {
-            if let Some(dpi) = dpi {
-                pkt_modify_hook(&mut pkt, dpi).await?;
-            }
+            pkt_modify_hook(&mut pkt, dpi, developer_mode).await?;
             pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
             pkt.transmit(&mut device).await?;
 
