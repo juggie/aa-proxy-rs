@@ -15,6 +15,7 @@ use tokio_uring::buf::BoundedBuf;
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::mitm::protos::*;
+use crate::mitm::AudioStreamType::AUDIO_STREAM_MEDIA;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
@@ -221,6 +222,7 @@ pub async fn pkt_modify_hook(
     pkt: &mut Packet,
     dpi: Option<u16>,
     developer_mode: bool,
+    disable_media_sink: bool,
 ) -> Result<()> {
     if pkt.channel != 0 {
         return Ok(());
@@ -256,6 +258,17 @@ pub async fn pkt_modify_hook(
                     control.unwrap(),
                     prev_val,
                     new_dpi
+                );
+            }
+
+            // disable media sink
+            if disable_media_sink {
+                msg.services
+                    .retain(|svc| svc.media_sink_service.audio_type() != AUDIO_STREAM_MEDIA);
+                info!(
+                    "{} <yellow>{:?}</>: media sink disabled",
+                    NAME,
+                    control.unwrap(),
                 );
             }
 
@@ -411,6 +424,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     mut rxr: Receiver<Packet>,
     dpi: Option<u16>,
     developer_mode: bool,
+    disable_media_sink: bool,
 ) -> Result<()> {
     let ssl = ssl_builder(proxy_type).await?;
 
@@ -484,7 +498,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
         if let Ok(mut pkt) = rx.try_recv() {
-            pkt_modify_hook(&mut pkt, dpi, developer_mode).await?;
+            pkt_modify_hook(&mut pkt, dpi, developer_mode, disable_media_sink).await?;
             pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
             pkt.transmit(&mut device).await?;
 
