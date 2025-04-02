@@ -10,7 +10,10 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
 - reconnecting: trying to reconnect/recover AndroidAuto connection in any possible case
 - bandwidth/transfer statistics
 - stall transfer detection
-- MITM (man-in-the-middle) mode support
+- MITM (man-in-the-middle) mode support with the following features:
+  - DPI change
+  - Disable media sink
+  - Developer mode
 
 ## Current project status
 Now after a lot of stress-testing and coding I think the project has matured enough, that I can say that the main stability goal was reached.
@@ -148,8 +151,14 @@ OPTIONS:
     -d, --debug
             Enable debug info
 
+        --developer-mode
+            MITM: Developer mode
+
+        --disable-media-sink
+            MITM: Disable media sink
+
         --dpi <DPI>
-            Force DPI (experimental)
+            MITM: Force DPI (experimental)
 
     -f, --full-frames
             Pass only complete frames during data transfer to the headunit
