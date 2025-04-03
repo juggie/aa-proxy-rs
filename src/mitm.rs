@@ -24,7 +24,13 @@ use crate::io_uring::Endpoint;
 use crate::io_uring::BUFFER_LEN;
 
 // module name for logging engine
-const NAME: &str = "<i><bright-black> mitm: </>";
+fn get_name(proxy_type: ProxyType) -> String {
+    let proxy = match proxy_type {
+        ProxyType::HeadUnit => "HU",
+        ProxyType::MobileDevice => "MD",
+    };
+    format!("<i><bright-black> mitm/{}: </>", proxy)
+}
 
 // Just a generic Result type to ease error handling for us. Errors in multithreaded
 // async contexts needs some extra restrictions
@@ -219,6 +225,7 @@ pub async fn pkt_debug(payload: &[u8]) -> Result<()> {
 
 /// packet modification hook
 pub async fn pkt_modify_hook(
+    proxy_type: ProxyType,
     pkt: &mut Packet,
     dpi: Option<u16>,
     developer_mode: bool,
@@ -254,7 +261,7 @@ pub async fn pkt_modify_hook(
                     .set_density(new_dpi.into());
                 info!(
                     "{} <yellow>{:?}</>: replacing DPI value: from <b>{}</> to <b>{}</>",
-                    NAME,
+                    get_name(proxy_type),
                     control.unwrap(),
                     prev_val,
                     new_dpi
@@ -267,7 +274,7 @@ pub async fn pkt_modify_hook(
                     .retain(|svc| svc.media_sink_service.audio_type() != AUDIO_STREAM_MEDIA);
                 info!(
                     "{} <yellow>{:?}</>: media sink disabled",
-                    NAME,
+                    get_name(proxy_type),
                     control.unwrap(),
                 );
             }
@@ -278,7 +285,7 @@ pub async fn pkt_modify_hook(
                 msg.set_model("Desktop Head Unit".into());
                 info!(
                     "{} <yellow>{:?}</>: enabling developer mode",
-                    NAME,
+                    get_name(proxy_type),
                     control.unwrap(),
                 );
             }
@@ -455,7 +462,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             let _ = server.accept();
             info!(
                 "{} 🔒 stage #{} of {}: SSL handshake: {}",
-                NAME,
+                get_name(proxy_type),
                 i,
                 STEPS,
                 server.ssl().state_string_long()
@@ -479,7 +486,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             let _ = server.do_handshake();
             info!(
                 "{} 🔒 stage #{} of {}: SSL handshake: {}",
-                NAME,
+                get_name(proxy_type),
                 i,
                 STEPS,
                 server.ssl().state_string_long()
@@ -498,7 +505,14 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
         if let Ok(mut pkt) = rx.try_recv() {
-            pkt_modify_hook(&mut pkt, dpi, developer_mode, disable_media_sink).await?;
+            pkt_modify_hook(
+                proxy_type,
+                &mut pkt,
+                dpi,
+                developer_mode,
+                disable_media_sink,
+            )
+            .await?;
             pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
             pkt.transmit(&mut device).await?;
 
