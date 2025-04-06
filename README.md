@@ -13,6 +13,7 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
 - MITM (man-in-the-middle) mode support with the following features:
   - DPI change
   - Disable media sink
+  - Disable TTS sink
   - Developer mode
 
 ## Current project status
@@ -156,6 +157,9 @@ OPTIONS:
 
         --disable-media-sink
             MITM: Disable media sink
+
+        --disable-tts-sink
+            MITM: Disable TTS sink
 
         --dpi <DPI>
             MITM: Force DPI (experimental)
