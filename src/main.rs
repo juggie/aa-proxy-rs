@@ -98,6 +98,10 @@ struct Args {
     #[clap(long, requires("mitm"))]
     dpi: Option<u16>,
 
+    /// MITM: remove tap restriction
+    #[clap(long, requires("mitm"))]
+    remove_tap_restriction: bool,
+
     /// MITM: Disable media sink
     #[clap(long, requires("mitm"))]
     disable_media_sink: bool,
@@ -309,6 +313,7 @@ fn main() {
     let developer_mode = args.developer_mode;
     let disable_media_sink = args.disable_media_sink;
     let disable_tts_sink = args.disable_tts_sink;
+    let remove_tap_restriction = args.remove_tap_restriction;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -326,6 +331,7 @@ fn main() {
         developer_mode,
         disable_media_sink,
         disable_tts_sink,
+        remove_tap_restriction,
     ));
 
     info!(

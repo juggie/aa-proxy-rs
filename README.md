@@ -12,6 +12,7 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
 - stall transfer detection
 - MITM (man-in-the-middle) mode support with the following features:
   - DPI change
+  - Remove tap restriction
   - Disable media sink
   - Disable TTS sink
   - Developer mode
@@ -188,6 +189,9 @@ OPTIONS:
 
     -m, --mitm
             Enable MITM mode (experimental)
+
+        --remove-tap-restriction
+            MITM: remove tap restriction
 
     -s, --stats-interval <SECONDS>
             Interval of showing data transfer statistics (0 = disabled) [default: 0]
