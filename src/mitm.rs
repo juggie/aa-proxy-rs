@@ -189,21 +189,21 @@ impl Packet {
 }
 
 /// shows packet/message contents as pretty string for debug
-pub async fn pkt_debug(payload: &[u8]) -> Result<()> {
+pub async fn pkt_debug(pkt: &Packet) -> Result<()> {
     // don't run further if we are not in Debug mode
     if !log_enabled!(Level::Debug) {
         return Ok(());
     }
 
     // message_id is the first 2 bytes of payload
-    let message_id: i32 = u16::from_be_bytes(payload[0..=1].try_into()?).into();
+    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
 
     // trying to obtain an Enum from message_id
     let control = protos::ControlMessageType::from_i32(message_id);
     debug!("message_id = {:04X}, {:?}", message_id, control);
 
     // parsing data
-    let data = &payload[2..]; // start of message data
+    let data = &pkt.payload[2..]; // start of message data
     let message: &dyn MessageDyn = match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
         MESSAGE_AUTH_COMPLETE => &AuthResponse::parse_from_bytes(data)?,
         MESSAGE_SERVICE_DISCOVERY_REQUEST => &ServiceDiscoveryRequest::parse_from_bytes(data)?,
@@ -466,7 +466,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if proxy_type == ProxyType::HeadUnit {
         // waiting for initial version frame (HU is starting transmission)
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
-        let _ = pkt_debug(&pkt.payload).await;
+        let _ = pkt_debug(&pkt).await;
         // sending to the MD
         tx.send(pkt).await?;
         // waiting for MD reply
@@ -496,7 +496,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         pkt.transmit(&mut device).await?;
         // waiting for MD reply
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
-        let _ = pkt_debug(&pkt.payload).await;
+        let _ = pkt_debug(&pkt).await;
         // sending reply back to the HU
         tx.send(pkt).await?;
 
@@ -546,7 +546,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         if let Ok(mut pkt) = rxr.try_recv() {
             match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
                 Ok(_) => {
-                    let _ = pkt_debug(&pkt.payload).await;
+                    let _ = pkt_debug(&pkt).await;
                     tx.send(pkt).await?;
                 }
                 Err(e) => error!("decrypt_payload: {:?}", e),
