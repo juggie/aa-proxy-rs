@@ -202,7 +202,7 @@ impl fmt::Display for Packet {
 }
 
 /// shows packet/message contents as pretty string for debug
-pub async fn pkt_debug(pkt: &Packet) -> Result<()> {
+pub async fn pkt_debug(proxy_type: ProxyType, pkt: &Packet) -> Result<()> {
     // don't run further if we are not in Debug mode
     if !log_enabled!(Level::Debug) {
         return Ok(());
@@ -479,7 +479,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if proxy_type == ProxyType::HeadUnit {
         // waiting for initial version frame (HU is starting transmission)
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
-        let _ = pkt_debug(&pkt).await;
+        let _ = pkt_debug(proxy_type, &pkt).await;
         // sending to the MD
         tx.send(pkt).await?;
         // waiting for MD reply
@@ -509,7 +509,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         pkt.transmit(&mut device).await?;
         // waiting for MD reply
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
-        let _ = pkt_debug(&pkt).await;
+        let _ = pkt_debug(proxy_type, &pkt).await;
         // sending reply back to the HU
         tx.send(pkt).await?;
 
@@ -559,7 +559,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         if let Ok(mut pkt) = rxr.try_recv() {
             match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
                 Ok(_) => {
-                    let _ = pkt_debug(&pkt).await;
+                    let _ = pkt_debug(proxy_type, &pkt).await;
                     tx.send(pkt).await?;
                 }
                 Err(e) => error!("decrypt_payload: {:?}", e),
