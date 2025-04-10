@@ -2,6 +2,7 @@ use log::log_enabled;
 use openssl::ssl::{Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
 use std::collections::VecDeque;
+use std::fmt;
 use std::io::{Read, Write};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -184,6 +185,18 @@ impl Packet {
         if message_type == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as u16 {
             mem_buf.write_from(&self.payload[2..])?;
         }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Packet {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "packet dump:\n")?;
+        write!(f, " channel: {:02X}\n", self.channel)?;
+        write!(f, " flags: {:02X}\n", self.flags)?;
+        write!(f, " final length: {:04X?}\n", self.final_length)?;
+        write!(f, " payload: {:02X?}\n", self.payload.clone().into_iter())?;
+
         Ok(())
     }
 }
