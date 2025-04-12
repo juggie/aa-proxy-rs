@@ -17,6 +17,7 @@ use tokio_uring::buf::BoundedBuf;
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::mitm::protos::*;
 use crate::mitm::AudioStreamType::*;
+use crate::mitm::SensorMessageId::*;
 use crate::mitm::SensorType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
@@ -48,6 +49,10 @@ pub const ENCRYPTED: u8 = 1 << 3;
 
 // location for hu_/md_ private keys and certificates:
 const KEYS_PATH: &str = "/etc/aa-proxy-rs";
+
+pub struct ModifyContext {
+    sensor_channel: Option<u8>,
+}
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum ProxyType {
@@ -246,20 +251,44 @@ pub async fn pkt_modify_hook(
     disable_media_sink: bool,
     disable_tts_sink: bool,
     remove_tap_restriction: bool,
+    video_in_motion: bool,
+    ctx: &mut ModifyContext,
 ) -> Result<()> {
-    if pkt.channel != 0 {
+    // message_id is the first 2 bytes of payload
+    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+    let data = &pkt.payload[2..]; // start of message data
+
+    // handling driving_status_data change
+    if let Some(ch) = ctx.sensor_channel {
+        if ch == pkt.channel {
+            match protos::SensorMessageId::from_i32(message_id).unwrap_or(SENSOR_MESSAGE_ERROR) {
+                SENSOR_MESSAGE_BATCH => {
+                    if let Ok(mut msg) = SensorBatch::parse_from_bytes(data) {
+                        if !msg.driving_status_data.is_empty() {
+                            // forcing status to 0 value
+                            msg.driving_status_data[0].set_status(0);
+                            // regenerating payload data
+                            pkt.payload = msg.write_to_bytes()?;
+                            pkt.payload.insert(0, (message_id >> 8) as u8);
+                            pkt.payload.insert(1, (message_id & 0xff) as u8);
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+        // end sensors processing
         return Ok(());
     }
 
-    // message_id is the first 2 bytes of payload
-    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-
+    if pkt.channel != 0 {
+        return Ok(());
+    }
     // trying to obtain an Enum from message_id
     let control = protos::ControlMessageType::from_i32(message_id);
     debug!("message_id = {:04X}, {:?}", message_id, control);
 
     // parsing data
-    let data = &pkt.payload[2..]; // start of message data
     match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
         MESSAGE_SERVICE_DISCOVERY_RESPONSE => {
             let mut msg = ServiceDiscoveryResponse::parse_from_bytes(data)?;
@@ -311,6 +340,24 @@ pub async fn pkt_modify_hook(
                     get_name(proxy_type),
                     control.unwrap(),
                 );
+            }
+
+            // obtain SENSOR_DRIVING_STATUS_DATA sensor channel
+            if video_in_motion {
+                if let Some(svc) = msg
+                    .services
+                    .iter()
+                    .find(|svc| !svc.sensor_source_service.sensors.is_empty())
+                {
+                    if let Some(_) = svc
+                        .sensor_source_service
+                        .sensors
+                        .iter()
+                        .find(|s| s.sensor_type() == SENSOR_DRIVING_STATUS_DATA)
+                    {
+                        ctx.sensor_channel = Some(svc.id() as u8);
+                    }
+                }
             }
 
             // remove tap restriction by removing SENSOR_SPEED
@@ -483,6 +530,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     disable_media_sink: bool,
     disable_tts_sink: bool,
     remove_tap_restriction: bool,
+    video_in_motion: bool,
 ) -> Result<()> {
     let ssl = ssl_builder(proxy_type).await?;
 
@@ -553,6 +601,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     }
 
     // main data processing/transfer loop
+    let mut ctx = ModifyContext {
+        sensor_channel: None,
+    };
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
         if let Ok(mut pkt) = rx.try_recv() {
@@ -564,6 +615,8 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 disable_media_sink,
                 disable_tts_sink,
                 remove_tap_restriction,
+                video_in_motion,
+                &mut ctx,
             )
             .await?;
             pkt.encrypt_payload(&mut mem_buf, &mut server).await?;

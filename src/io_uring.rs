@@ -270,6 +270,7 @@ pub async fn io_loop(
     disable_media_sink: bool,
     disable_tts_sink: bool,
     remove_tap_restriction: bool,
+    video_in_motion: bool,
 ) -> Result<()> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
@@ -355,6 +356,7 @@ pub async fn io_loop(
                 disable_media_sink,
                 disable_tts_sink,
                 remove_tap_restriction,
+                video_in_motion,
             ));
             from_stream = tokio_uring::spawn(proxy(
                 ProxyType::MobileDevice,
@@ -368,6 +370,7 @@ pub async fn io_loop(
                 disable_media_sink,
                 disable_tts_sink,
                 remove_tap_restriction,
+                video_in_motion,
             ));
         } else {
             // We need to copy in both directions...

@@ -15,6 +15,7 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
   - Remove tap restriction
   - Disable media sink
   - Disable TTS sink
+  - Video in motion
   - Developer mode
 
 ## Current project status
@@ -204,6 +205,9 @@ OPTIONS:
 
     -V, --version
             Print version information
+
+        --video-in-motion
+            MITM: video in motion
 ```
 Most options are self explanatory, but these needs some more attention:<br>
 - `-l, --legacy`<br>
