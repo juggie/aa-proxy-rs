@@ -17,7 +17,14 @@ for filename in *img; do
 	mount -o loop,offset=33554944 $filename /mnt
 	rm /mnt/etc/init.d/S93aawgd
 	cp /root/S93aa-proxy-rs /mnt/etc/init.d
-	cp /root/aa-proxy-rs /mnt/usr/bin
+
+	# pi zero w has different binary
+	if [ $filename = "raspberrypi0w-sdcard.img" ]; then
+		cp /root/aa-proxy-rs-0w /mnt/usr/bin/aa-proxy-rs
+	else
+		cp /root/aa-proxy-rs /mnt/usr/bin
+	fi
+
 	umount /mnt
 
 	echo ">>> compressing $filename..."
