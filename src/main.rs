@@ -70,7 +70,7 @@ struct Args {
     iface: String,
 
     /// hostapd.conf file location
-    #[clap(long, parse(from_os_str), default_value = "/etc/hostapd.conf")]
+    #[clap(long, parse(from_os_str), default_value = "/var/run/hostapd.conf")]
     hostapd_conf: PathBuf,
 
     /// BLE device name
