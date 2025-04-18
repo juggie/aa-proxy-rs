@@ -407,11 +407,8 @@ pub async fn pkt_modify_hook(
     Ok(())
 }
 
-/// encapsulates SSL data into Packet and transmits
-async fn ssl_encapsulate_transmit<A: Endpoint<A>>(
-    device: &mut Rc<A>,
-    mut mem_buf: SslMemBuf,
-) -> Result<()> {
+/// encapsulates SSL data into Packet
+async fn ssl_encapsulate(mut mem_buf: SslMemBuf) -> Result<Packet> {
     // read SSL-generated data
     let mut res: Vec<u8> = Vec::new();
     let _ = mem_buf.read_to(&mut res);
@@ -420,16 +417,12 @@ async fn ssl_encapsulate_transmit<A: Endpoint<A>>(
     let message_type = ControlMessageType::MESSAGE_ENCAPSULATED_SSL as u16;
     res.insert(0, (message_type >> 8) as u8);
     res.insert(1, (message_type & 0xff) as u8);
-    let pkt = Packet {
+    Ok(Packet {
         channel: 0x00,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: res,
-    };
-    // transmit to device
-    pkt.transmit(device).await?;
-
-    Ok(())
+    })
 }
 
 /// creates Ssl for HeadUnit (SSL server) and MobileDevice (SSL client)
@@ -605,7 +598,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 STEPS,
                 server.ssl().state_string_long()
             );
-            ssl_encapsulate_transmit(&mut device, mem_buf.clone()).await?;
+            let pkt = ssl_encapsulate(mem_buf.clone()).await?;
+            let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
+            pkt.transmit(&mut device).await?;
         }
     } else if proxy_type == ProxyType::MobileDevice {
         // expecting version request from the HU here...
@@ -640,7 +635,10 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 // this was the last handshake step, need to break here
                 break;
             };
-            ssl_encapsulate_transmit(&mut device, mem_buf.clone()).await?;
+            let pkt = ssl_encapsulate(mem_buf.clone()).await?;
+            let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
+            pkt.transmit(&mut device).await?;
+
             let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
             let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
