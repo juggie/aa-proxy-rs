@@ -588,6 +588,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         // waiting for MD reply
         let pkt = rx.recv().await.ok_or("rx channel hung up")?;
         // sending reply back to the HU
+        let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
         pkt.transmit(&mut device).await?;
 
         // doing SSL handshake
@@ -610,6 +611,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         // expecting version request from the HU here...
         let pkt = rx.recv().await.ok_or("rx channel hung up")?;
         // sending to the MD
+        let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
         pkt.transmit(&mut device).await?;
         // waiting for MD reply
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
@@ -664,7 +666,15 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 &mut ctx,
             )
             .await?;
+            let _ = pkt_debug(
+                proxy_type,
+                HexdumpLevel::DecryptedOutput,
+                hex_requested,
+                &pkt,
+            )
+            .await;
             pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
+            let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
             pkt.transmit(&mut device).await?;
 
             // Increment byte counters for statistics

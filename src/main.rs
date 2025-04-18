@@ -34,6 +34,8 @@ pub enum HexdumpLevel {
     Disabled,
     DecryptedInput,
     RawInput,
+    DecryptedOutput,
+    RawOutput,
     All,
 }
 
