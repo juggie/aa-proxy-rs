@@ -28,6 +28,15 @@ const NAME: &str = "<i><bright-black> main: </>";
 const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
 const TCP_SERVER_PORT: i32 = 5288;
 
+#[derive(clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy)]
+pub enum HexdumpLevel {
+    #[default]
+    Disabled,
+    DecryptedInput,
+    RawInput,
+    All,
+}
+
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
@@ -39,6 +48,10 @@ struct Args {
     /// Enable debug info
     #[clap(short, long)]
     debug: bool,
+
+    /// Hex dump level
+    #[clap(long, default_value_t, value_enum, requires("debug"))]
+    hexdump_level: HexdumpLevel,
 
     /// Enable legacy mode
     #[clap(short, long)]
@@ -319,6 +332,7 @@ fn main() {
     let disable_tts_sink = args.disable_tts_sink;
     let remove_tap_restriction = args.remove_tap_restriction;
     let video_in_motion = args.video_in_motion;
+    let hex_requested = args.hexdump_level;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -338,6 +352,7 @@ fn main() {
         disable_tts_sink,
         remove_tap_restriction,
         video_in_motion,
+        hex_requested,
     ));
 
     info!(

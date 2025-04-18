@@ -37,6 +37,7 @@ use crate::mitm::ProxyType;
 use crate::mitm::FRAME_TYPE_FIRST;
 use crate::mitm::FRAME_TYPE_MASK;
 use crate::mitm::HEADER_LENGTH;
+use crate::HexdumpLevel;
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
 // read and write calls:
@@ -271,6 +272,7 @@ pub async fn io_loop(
     disable_tts_sink: bool,
     remove_tap_restriction: bool,
     video_in_motion: bool,
+    hex_requested: HexdumpLevel,
 ) -> Result<()> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
@@ -358,6 +360,7 @@ pub async fn io_loop(
                 remove_tap_restriction,
                 video_in_motion,
                 full_frames,
+                hex_requested,
             ));
             from_stream = tokio_uring::spawn(proxy(
                 ProxyType::MobileDevice,
@@ -373,6 +376,7 @@ pub async fn io_loop(
                 remove_tap_restriction,
                 video_in_motion,
                 full_frames,
+                hex_requested,
             ));
         } else {
             // We need to copy in both directions...

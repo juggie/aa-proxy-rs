@@ -174,6 +174,10 @@ OPTIONS:
     -h, --help
             Print help information
 
+        --hexdump-level <HEXDUMP_LEVEL>
+            Hex dump level [default: disabled] [possible values: disabled, decrypted-input,
+            raw-input, all]
+
         --hostapd-conf <HOSTAPD_CONF>
             hostapd.conf file location [default: /var/run/hostapd.conf]
 

@@ -25,6 +25,7 @@ use protos::ControlMessageType::{self, *};
 
 use crate::io_uring::Endpoint;
 use crate::io_uring::BUFFER_LEN;
+use crate::HexdumpLevel;
 
 // module name for logging engine
 fn get_name(proxy_type: ProxyType) -> String {
@@ -208,7 +209,12 @@ impl fmt::Display for Packet {
 }
 
 /// shows packet/message contents as pretty string for debug
-pub async fn pkt_debug(proxy_type: ProxyType, pkt: &Packet) -> Result<()> {
+pub async fn pkt_debug(
+    proxy_type: ProxyType,
+    hexdump: HexdumpLevel,
+    hex_requested: HexdumpLevel,
+    pkt: &Packet,
+) -> Result<()> {
     // don't run further if we are not in Debug mode
     if !log_enabled!(Level::Debug) {
         return Ok(());
@@ -220,6 +226,9 @@ pub async fn pkt_debug(proxy_type: ProxyType, pkt: &Packet) -> Result<()> {
     // trying to obtain an Enum from message_id
     let control = protos::ControlMessageType::from_i32(message_id);
     debug!("message_id = {:04X}, {:?}", message_id, control);
+    if hex_requested >= hexdump {
+        debug!("{} {:?} {}", get_name(proxy_type), hexdump, pkt);
+    }
 
     // parsing data
     let data = &pkt.payload[2..]; // start of message data
@@ -532,6 +541,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     remove_tap_restriction: bool,
     video_in_motion: bool,
     passthrough: bool,
+    hex_requested: HexdumpLevel,
 ) -> Result<()> {
     // in full_frames/passthrough mode we only directly pass packets from one endpoint to the other
     if passthrough {
@@ -566,7 +576,13 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if proxy_type == ProxyType::HeadUnit {
         // waiting for initial version frame (HU is starting transmission)
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
-        let _ = pkt_debug(proxy_type, &pkt).await;
+        let _ = pkt_debug(
+            proxy_type,
+            HexdumpLevel::DecryptedInput, // the packet is not encrypted
+            hex_requested,
+            &pkt,
+        )
+        .await;
         // sending to the MD
         tx.send(pkt).await?;
         // waiting for MD reply
@@ -578,6 +594,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         const STEPS: u8 = 2;
         for i in 1..=STEPS {
             let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
+            let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
             let _ = server.accept();
             info!(
@@ -596,7 +613,13 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         pkt.transmit(&mut device).await?;
         // waiting for MD reply
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
-        let _ = pkt_debug(proxy_type, &pkt).await;
+        let _ = pkt_debug(
+            proxy_type,
+            HexdumpLevel::DecryptedInput, // the packet is not encrypted
+            hex_requested,
+            &pkt,
+        )
+        .await;
         // sending reply back to the HU
         tx.send(pkt).await?;
 
@@ -617,6 +640,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             };
             ssl_encapsulate_transmit(&mut device, mem_buf.clone()).await?;
             let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
+            let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
         }
     }
@@ -650,9 +674,16 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
 
         // handling input data from the reader thread
         if let Ok(mut pkt) = rxr.try_recv() {
+            let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
             match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
                 Ok(_) => {
-                    let _ = pkt_debug(proxy_type, &pkt).await;
+                    let _ = pkt_debug(
+                        proxy_type,
+                        HexdumpLevel::DecryptedInput,
+                        hex_requested,
+                        &pkt,
+                    )
+                    .await;
                     tx.send(pkt).await?;
                 }
                 Err(e) => error!("decrypt_payload: {:?}", e),
