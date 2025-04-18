@@ -1,5 +1,7 @@
 # 🛸 aa-proxy-rs
 
+[![Discord](https://img.shields.io/discord/1358047273434615968?style=for-the-badge&logo=discord&logoColor=white&label=Discord&labelColor=%235865F2&color=%231825A2)](https://discord.gg/WAFNpNGn)
+
 ## About
 This is a Rust-Written proxy tool to bridge between wireless Android phone and a USB-wired car head unit for using Google's Android Auto.
 Currently it is intended to run as a more-or-less drop-in replacement of the `aawgd` from the [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project.
