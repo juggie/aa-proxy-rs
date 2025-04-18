@@ -175,7 +175,7 @@ OPTIONS:
             Print help information
 
         --hostapd-conf <HOSTAPD_CONF>
-            hostapd.conf file location [default: /etc/hostapd.conf]
+            hostapd.conf file location [default: /var/run/hostapd.conf]
 
     -i, --iface <IFACE>
             WLAN / Wi-Fi Hotspot interface [default: wlan0]
