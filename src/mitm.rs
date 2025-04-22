@@ -443,9 +443,6 @@ async fn ssl_builder(proxy_type: ProxyType) -> Result<Ssl> {
 
     ctx_builder.set_min_proto_version(Some(openssl::ssl::SslVersion::TLS1_2))?;
     ctx_builder.set_options(openssl::ssl::SslOptions::NO_TLSV1_3);
-    if proxy_type == ProxyType::HeadUnit {
-        ctx_builder.set_cipher_list("ECDHE-RSA-AES128-GCM-SHA256")?;
-    }
 
     let openssl_ctx = ctx_builder.build();
     let mut ssl = Ssl::new(&openssl_ctx)?;
