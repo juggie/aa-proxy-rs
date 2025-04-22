@@ -596,8 +596,15 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 get_name(proxy_type),
                 i,
                 STEPS,
-                server.ssl().state_string_long()
+                server.ssl().state_string_long(),
             );
+            if server.ssl().is_init_finished() {
+                info!(
+                    "{} 🔒 SSL init complete, negotiated cipher: <b><blue>{}</>",
+                    get_name(proxy_type),
+                    server.ssl().current_cipher().unwrap().name(),
+                );
+            }
             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
             let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
             pkt.transmit(&mut device).await?;
@@ -629,8 +636,15 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 get_name(proxy_type),
                 i,
                 STEPS,
-                server.ssl().state_string_long()
+                server.ssl().state_string_long(),
             );
+            if server.ssl().is_init_finished() {
+                info!(
+                    "{} 🔒 SSL init complete, negotiated cipher: <b><blue>{}</>",
+                    get_name(proxy_type),
+                    server.ssl().current_cipher().unwrap().name(),
+                );
+            }
             if i == 3 {
                 // this was the last handshake step, need to break here
                 break;
