@@ -64,12 +64,7 @@ struct Args {
     connect: Option<Address>,
 
     /// Log file path
-    #[clap(
-        short,
-        long,
-        parse(from_os_str),
-        default_value = "/var/log/aa-proxy-rs.log"
-    )]
+    #[clap(short, long, value_parser, default_value = "/var/log/aa-proxy-rs.log")]
     logfile: PathBuf,
 
     /// Interval of showing data transfer statistics (0 = disabled)
@@ -85,7 +80,7 @@ struct Args {
     iface: String,
 
     /// hostapd.conf file location
-    #[clap(long, parse(from_os_str), default_value = "/var/run/hostapd.conf")]
+    #[clap(long, value_parser, default_value = "/var/run/hostapd.conf")]
     hostapd_conf: PathBuf,
 
     /// BLE device name
