@@ -41,7 +41,12 @@ pub enum HexdumpLevel {
 
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
-#[clap(version, about, long_about = None)]
+#[clap(version, long_about = None, about = format!(
+    "🛸 aa-proxy-rs, build: {}, git: {}-{}",
+    env!("BUILD_DATE"),
+    env!("GIT_DATE"),
+    env!("GIT_HASH")
+))]
 struct Args {
     /// BLE advertising
     #[clap(short, long)]
