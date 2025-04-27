@@ -69,7 +69,7 @@ struct Args {
     connect: Option<Address>,
 
     /// Log file path
-    #[clap(short, long, value_parser, default_value = "/var/log/aa-proxy-rs.log")]
+    #[clap(long, value_parser, default_value = "/var/log/aa-proxy-rs.log")]
     logfile: PathBuf,
 
     /// Interval of showing data transfer statistics (0 = disabled)
