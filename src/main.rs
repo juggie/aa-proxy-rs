@@ -65,7 +65,7 @@ struct Args {
     legacy: bool,
 
     /// Auto-connect to saved phone or specified phone MAC address if provided
-    #[clap(short, long, default_missing_value("00:00:00:00:00:00"))]
+    #[clap(short, long, num_args(..=1), default_missing_value("00:00:00:00:00:00"))]
     connect: Option<Address>,
 
     /// Log file path
