@@ -148,7 +148,10 @@ impl Packet {
     }
 
     /// composes a final frame and transmits it to endpoint device (HU/MD)
-    async fn transmit<A: Endpoint<A>>(&self, device: &mut Rc<A>) -> Result<()> {
+    async fn transmit<A: Endpoint<A>>(
+        &self,
+        device: &mut Rc<A>,
+    ) -> std::result::Result<usize, std::io::Error> {
         let len = self.payload.len() as u16;
         let mut frame: Vec<u8> = vec![];
         frame.push(self.channel);
@@ -163,9 +166,7 @@ impl Packet {
             frame.push((final_len & 0xff) as u8);
         }
         frame.append(&mut self.payload.clone());
-        let _ = device.write(frame).submit().await;
-
-        Ok(())
+        device.write(frame).submit().await.0
     }
 
     /// decapsulates SSL payload and writes to SslStream
