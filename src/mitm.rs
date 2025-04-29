@@ -287,22 +287,24 @@ pub async fn pkt_modify_hook(
 
             // DPI
             if let Some(new_dpi) = dpi {
-                // get previous/original value
-                let prev_val = msg.services[0].media_sink_service.video_configs[0].density();
-                // set new value
-                msg.services[0]
-                    .media_sink_service
-                    .as_mut()
-                    .unwrap()
-                    .video_configs[0]
-                    .set_density(new_dpi.into());
-                info!(
-                    "{} <yellow>{:?}</>: replacing DPI value: from <b>{}</> to <b>{}</>",
-                    get_name(proxy_type),
-                    control.unwrap(),
-                    prev_val,
-                    new_dpi
-                );
+                if let Some(svc) = msg
+                    .services
+                    .iter_mut()
+                    .find(|svc| !svc.media_sink_service.video_configs.is_empty())
+                {
+                    // get previous/original value
+                    let prev_val = svc.media_sink_service.video_configs[0].density();
+                    // set new value
+                    svc.media_sink_service.as_mut().unwrap().video_configs[0]
+                        .set_density(new_dpi.into());
+                    info!(
+                        "{} <yellow>{:?}</>: replacing DPI value: from <b>{}</> to <b>{}</>",
+                        get_name(proxy_type),
+                        control.unwrap(),
+                        prev_val,
+                        new_dpi
+                    );
+                }
             }
 
             // disable tts sink
