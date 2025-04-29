@@ -78,16 +78,7 @@ pub struct SslMemBuf {
 // Read implementation used internally by OpenSSL
 impl Read for SslMemBuf {
     fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
-        let result = self.client_stream.lock().unwrap().read(buf);
-        if let Ok(0) = result {
-            // Treat no data as blocking instead of EOF
-            Err(std::io::Error::new(
-                std::io::ErrorKind::WouldBlock,
-                "blocking",
-            ))
-        } else {
-            result
-        }
+        self.client_stream.lock().unwrap().read(buf)
     }
 }
 
@@ -105,16 +96,7 @@ impl Write for SslMemBuf {
 // Own functions for accessing shared data
 impl SslMemBuf {
     fn read_to(&mut self, buf: &mut Vec<u8>) -> std::result::Result<usize, std::io::Error> {
-        let result = self.server_stream.lock().unwrap().read_to_end(buf);
-        if let Ok(0) = result {
-            // Treat no data as blocking instead of EOF
-            Err(std::io::Error::new(
-                std::io::ErrorKind::WouldBlock,
-                "blocking",
-            ))
-        } else {
-            result
-        }
+        self.server_stream.lock().unwrap().read_to_end(buf)
     }
     fn write_from(&mut self, buf: &[u8]) -> std::result::Result<usize, std::io::Error> {
         self.client_stream.lock().unwrap().write(buf)
