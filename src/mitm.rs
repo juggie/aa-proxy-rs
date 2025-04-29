@@ -119,10 +119,10 @@ impl Packet {
     ) -> Result<()> {
         if (self.flags & ENCRYPTED) == ENCRYPTED {
             // save plain data for encryption
-            let _ = server.ssl_write(&self.payload);
+            server.ssl_write(&self.payload)?;
             // read encrypted data
             let mut res: Vec<u8> = Vec::new();
-            let _ = mem_buf.read_to(&mut res);
+            mem_buf.read_to(&mut res)?;
             self.payload = res;
         }
 
@@ -137,10 +137,10 @@ impl Packet {
     ) -> Result<()> {
         if (self.flags & ENCRYPTED) == ENCRYPTED {
             // save encrypted data
-            let _ = mem_buf.write_from(&self.payload);
+            mem_buf.write_from(&self.payload)?;
             // read plain data
             let mut res: Vec<u8> = Vec::new();
-            let _ = server.read_to_end(&mut res);
+            server.read_to_end(&mut res)?;
             self.payload = res;
         }
 
@@ -394,7 +394,7 @@ pub async fn pkt_modify_hook(
 async fn ssl_encapsulate(mut mem_buf: SslMemBuf) -> Result<Packet> {
     // read SSL-generated data
     let mut res: Vec<u8> = Vec::new();
-    let _ = mem_buf.read_to(&mut res);
+    mem_buf.read_to(&mut res)?;
 
     // create MESSAGE_ENCAPSULATED_SSL Packet
     let message_type = ControlMessageType::MESSAGE_ENCAPSULATED_SSL as u16;
