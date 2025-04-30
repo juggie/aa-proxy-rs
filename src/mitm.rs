@@ -1,5 +1,5 @@
 use log::log_enabled;
-use openssl::ssl::{Ssl, SslContextBuilder, SslFiletype, SslMethod};
+use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
 use std::collections::VecDeque;
 use std::fmt;
@@ -501,6 +501,21 @@ pub async fn endpoint_reader<A: Endpoint<A>>(device: Rc<A>, tx: Sender<Packet>) 
     }
 }
 
+/// checking if there was a true fatal SSL error
+/// Note that the error may not be fatal. For example if the underlying
+/// stream is an asynchronous one then `HandshakeError::WouldBlock` may
+/// just mean to wait for more I/O to happen later.
+fn ssl_check_failure<T>(res: std::result::Result<T, openssl::ssl::Error>) -> Result<()> {
+    if let Err(err) = res {
+        match err.code() {
+            ErrorCode::WANT_READ | ErrorCode::WANT_WRITE | ErrorCode::SYSCALL => Ok(()),
+            _ => return Err(Box::new(err)),
+        }
+    } else {
+        Ok(())
+    }
+}
+
 /// main thread doing all packet processing of an endpoint/device
 pub async fn proxy<A: Endpoint<A> + 'static>(
     proxy_type: ProxyType,
@@ -572,7 +587,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
             let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
-            let _ = server.accept();
+            ssl_check_failure(server.accept())?;
             info!(
                 "{} 🔒 stage #{} of {}: SSL handshake: {}",
                 get_name(proxy_type),
@@ -612,7 +627,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         // doing SSL handshake
         const STEPS: u8 = 3;
         for i in 1..=STEPS {
-            let _ = server.do_handshake();
+            ssl_check_failure(server.do_handshake())?;
             info!(
                 "{} 🔒 stage #{} of {}: SSL handshake: {}",
                 get_name(proxy_type),
