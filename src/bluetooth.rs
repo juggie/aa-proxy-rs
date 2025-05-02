@@ -202,7 +202,9 @@ async fn power_up_and_wait_for_connection(
         Ok(handle_hsp)
     });
 
-    let req = handle_aa.next().await.expect("received no connect request");
+    let req = timeout(Duration::from_secs(10), handle_aa.next())
+        .await?
+        .expect("received no connect request");
     info!(
         "{} 📱 AA Wireless Profile: connect from: <b>{}</>",
         NAME,
