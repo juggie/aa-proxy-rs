@@ -137,83 +137,32 @@ Startup parameters (see below) are defined [here](https://github.com/manio/aa-pr
 
 ## Usage
 ```
-aa-proxy-rs 0.3.0
-AndroidAuto wired/wireless proxy
+Usage: aa-proxy-rs [OPTIONS]
 
-USAGE:
-    aa-proxy-rs [OPTIONS]
-
-OPTIONS:
-    -a, --advertise
-            BLE advertising
-
-    -b, --btalias <BTALIAS>
-            BLE device name
-
-    -c, --connect <CONNECT>
-            Auto-connect to saved phone or specified phone MAC address if provided
-
-    -d, --debug
-            Enable debug info
-
-        --developer-mode
-            MITM: Developer mode
-
-        --disable-media-sink
-            MITM: Disable media sink
-
-        --disable-tts-sink
-            MITM: Disable TTS sink
-
-        --dpi <DPI>
-            MITM: Force DPI (experimental)
-
-    -f, --full-frames
-            Pass only complete frames during data transfer to the headunit
-
-    -h, --help
-            Print help information
-
-        --hexdump-level <HEXDUMP_LEVEL>
-            Hex dump level [default: disabled] [possible values: disabled, decrypted-input,
-            raw-input, decrypted-output, raw-output, all]
-
-        --hostapd-conf <HOSTAPD_CONF>
-            hostapd.conf file location [default: /var/run/hostapd.conf]
-
-    -i, --iface <IFACE>
-            WLAN / Wi-Fi Hotspot interface [default: wlan0]
-
-    -k, --keepalive
-            Keep alive mode: BLE adapter doesn't turn off after successful connection, so that the
-            phone can remain connected (used in special configurations)
-
-    -l, --legacy
-            Enable legacy mode
-
-    -l, --logfile <LOGFILE>
-            Log file path [default: /var/log/aa-proxy-rs.log]
-
-    -m, --mitm
-            Enable MITM mode (experimental)
-
-        --remove-tap-restriction
-            MITM: remove tap restriction
-
-    -s, --stats-interval <SECONDS>
-            Interval of showing data transfer statistics (0 = disabled) [default: 0]
-
-    -t, --timeout-secs <SECONDS>
-            Data transfer timeout [default: 10]
-
-    -u, --udc <UDC>
-            UDC Controller name
-
-    -V, --version
-            Print version information
-
-        --video-in-motion
-            MITM: video in motion
+Options:
+  -a, --advertise                      BLE advertising
+  -d, --debug                          Enable debug info
+      --hexdump-level <HEXDUMP_LEVEL>  Hex dump level [default: disabled] [possible values: disabled, decrypted-input, raw-input, decrypted-output, raw-output, all]
+  -l, --legacy                         Enable legacy mode
+  -c, --connect [<CONNECT>]            Auto-connect to saved phone or specified phone MAC address if provided
+      --logfile <LOGFILE>              Log file path [default: /var/log/aa-proxy-rs.log]
+  -s, --stats-interval <SECONDS>       Interval of showing data transfer statistics (0 = disabled) [default: 0]
+  -u, --udc <UDC>                      UDC Controller name
+  -i, --iface <IFACE>                  WLAN / Wi-Fi Hotspot interface [default: wlan0]
+      --hostapd-conf <HOSTAPD_CONF>    hostapd.conf file location [default: /var/run/hostapd.conf]
+  -b, --btalias <BTALIAS>              BLE device name
+  -k, --keepalive                      Keep alive mode: BLE adapter doesn't turn off after successful connection, so that the phone can remain connected (used in special configurations)
+  -t, --timeout-secs <SECONDS>         Data transfer timeout [default: 10]
+  -f, --full-frames                    Pass only complete frames during data transfer to the headunit
+  -m, --mitm                           Enable MITM mode (experimental)
+      --dpi <DPI>                      MITM: Force DPI (experimental)
+      --remove-tap-restriction         MITM: remove tap restriction
+      --video-in-motion                MITM: video in motion
+      --disable-media-sink             MITM: Disable media sink
+      --disable-tts-sink               MITM: Disable TTS sink
+      --developer-mode                 MITM: Developer mode
+  -h, --help                           Print help
+  -V, --version                        Print version
 ```
 Most options are self explanatory, but these needs some more attention:<br>
 - `-l, --legacy`<br>
