@@ -274,6 +274,7 @@ pub async fn io_loop(
     video_in_motion: bool,
     hex_requested: HexdumpLevel,
     wired: bool,
+    dhu: bool,
 ) -> Result<()> {
     info!("{} 🛰️ Starting TCP server...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();

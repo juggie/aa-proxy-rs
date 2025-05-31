@@ -136,6 +136,11 @@ struct Args {
     /// MITM: Enable wired USB connection with phone
     #[clap(short, long, requires("mitm"))]
     wired: bool,
+
+    /// Use a Google Android Auto Desktop Head Unit emulator
+    /// instead of real HU device (will listen on TCP 5277 port)
+    #[clap(long)]
+    dhu: bool,
 }
 
 #[derive(Clone)]
@@ -340,6 +345,7 @@ fn main() {
     let video_in_motion = args.video_in_motion;
     let hex_requested = args.hexdump_level;
     let wired = args.wired;
+    let dhu = args.dhu;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -361,6 +367,7 @@ fn main() {
         video_in_motion,
         hex_requested,
         wired,
+        dhu,
     ));
 
     info!(
