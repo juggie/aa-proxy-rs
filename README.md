@@ -19,6 +19,7 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
   - Disable TTS sink
   - Video in motion
   - Developer mode
+  - Wired USB connection mode (without Bluetooth handshake and WiFi)
 
 ## Current project status
 Now after a lot of stress-testing and coding I think the project has matured enough, that I can say that the main stability goal was reached.
@@ -161,6 +162,7 @@ Options:
       --disable-media-sink             MITM: Disable media sink
       --disable-tts-sink               MITM: Disable TTS sink
       --developer-mode                 MITM: Developer mode
+  -w, --wired                          MITM: Enable wired USB connection with phone
   -h, --help                           Print help
   -V, --version                        Print version
 ```

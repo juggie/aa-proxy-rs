@@ -132,6 +132,10 @@ struct Args {
     /// MITM: Developer mode
     #[clap(long, requires("mitm"))]
     developer_mode: bool,
+
+    /// MITM: Enable wired USB connection with phone
+    #[clap(short, long, requires("mitm"))]
+    wired: bool,
 }
 
 #[derive(Clone)]
@@ -335,6 +339,7 @@ fn main() {
     let remove_tap_restriction = args.remove_tap_restriction;
     let video_in_motion = args.video_in_motion;
     let hex_requested = args.hexdump_level;
+    let wired = args.wired;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -355,6 +360,7 @@ fn main() {
         remove_tap_restriction,
         video_in_motion,
         hex_requested,
+        wired,
     ));
 
     info!(
