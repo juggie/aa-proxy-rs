@@ -101,10 +101,6 @@ struct Args {
     #[clap(short, long, value_name = "SECONDS", default_value_t = 10)]
     timeout_secs: u16,
 
-    /// Pass only complete frames during data transfer to the headunit
-    #[clap(short, long)]
-    full_frames: bool,
-
     /// Enable MITM mode (experimental)
     #[clap(short, long)]
     mitm: bool,
@@ -335,7 +331,6 @@ fn main() {
     let need_restart_cloned = need_restart.clone();
     let tcp_start = Arc::new(Notify::new());
     let tcp_start_cloned = tcp_start.clone();
-    let full_frames = args.full_frames;
     let mitm = args.mitm;
     let dpi = args.dpi;
     let developer_mode = args.developer_mode;
@@ -357,7 +352,6 @@ fn main() {
         need_restart_cloned,
         tcp_start_cloned,
         read_timeout,
-        full_frames,
         mitm,
         dpi,
         developer_mode,

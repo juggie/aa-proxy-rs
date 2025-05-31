@@ -34,9 +34,6 @@ use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
 use crate::mitm::Packet;
 use crate::mitm::ProxyType;
-use crate::mitm::FRAME_TYPE_FIRST;
-use crate::mitm::FRAME_TYPE_MASK;
-use crate::mitm::HEADER_LENGTH;
 use crate::HexdumpLevel;
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
@@ -69,104 +66,6 @@ impl Endpoint<TcpStream> for TcpStream {
     }
     fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T> {
         self.write(buf)
-    }
-}
-
-async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
-    from: Rc<A>,
-    to: Rc<B>,
-    dbg_name_from: &'static str,
-    dbg_name_to: &'static str,
-    bytes_written: Arc<AtomicUsize>,
-    read_timeout: Duration,
-    full_frames: bool,
-) -> Result<()> {
-    let mut buf = vec![0u8; BUFFER_LEN];
-    loop {
-        // things look weird: we pass ownership of the buffer to `read`, and we get
-        // it back, _even if there was an error_. There's a whole trait for that,
-        // which `Vec<u8>` implements!
-        debug!("{}: before read", dbg_name_from);
-        let slice = {
-            if full_frames {
-                // first: read only the header
-                buf.slice(..HEADER_LENGTH)
-            } else {
-                buf.slice(..)
-            }
-        };
-        let retval = from.read(slice);
-        let (res, buf_read) = timeout(read_timeout, retval)
-            .await
-            .map_err(|e| -> String { format!("{} read: {}", dbg_name_from, e) })?;
-        // Propagate errors, see how many bytes we read
-        let mut n = res?;
-        debug!("{}: after read, {} bytes", dbg_name_from, n);
-        if n == 0 {
-            // A read of size zero signals EOF (end of file), finish gracefully
-            return Ok(());
-        }
-        buf = buf_read.into_inner();
-
-        // full message handling
-        if full_frames {
-            if n != HEADER_LENGTH {
-                // this is unexpected
-                return Ok(());
-            }
-            // compute message length
-            let mut message_length = (buf[3] as u16 + ((buf[2] as u16) << 8)) as usize;
-
-            if (buf[1] & FRAME_TYPE_MASK) == FRAME_TYPE_FIRST {
-                // This means the header is 8 bytes long, we need to read four more bytes.
-                message_length += 4;
-            }
-            if (HEADER_LENGTH + message_length) > BUFFER_LEN {
-                // Not enough space in the buffer. This is unexpected.
-                panic!("Not enough space in the buffer");
-            }
-
-            let mut remain = message_length;
-            // continue reading the rest of the message
-            while remain > 0 {
-                debug!(
-                    "{}: before read to end, computed message_length = {}, remain = {}",
-                    dbg_name_from, message_length, remain
-                );
-                let retval = from.read(buf.slice(n..n + remain));
-                let (res, chunk) = timeout(read_timeout, retval)
-                    .await
-                    .map_err(|e| -> String { format!("{} read to end: {}", dbg_name_from, e) })?;
-                // Propagate errors, see how many bytes we read
-                let len = res?;
-                debug!("{}: after read to end, {} bytes", dbg_name_from, len);
-                if len == 0 {
-                    // A read of size zero signals EOF (end of file), finish gracefully
-                    return Ok(());
-                }
-                remain -= len;
-                n += len;
-                buf = chunk.into_inner();
-            }
-        }
-
-        // The `slice` method here is implemented in an extension trait: it
-        // returns an owned slice of our `Vec<u8>`, which we later turn back
-        // into the full `Vec<u8>`
-        debug!("{}: before write {} bytes", dbg_name_to, n);
-        let retval = to.write(buf.slice(..n)).submit();
-        let (res, buf_write) = timeout(read_timeout, retval)
-            .await
-            .map_err(|e| -> String { format!("{} write: {}", dbg_name_to, e) })?;
-        let n = res?;
-        debug!("{}: after write, {} bytes", dbg_name_to, n);
-        // Increment byte counters for statistics
-        bytes_written.fetch_add(n, Ordering::Relaxed);
-
-        // Later is now, we want our full buffer back.
-        // That's why we declared our binding `mut` way back at the start of `copy`,
-        // even though we moved it into the very first `TcpStream::read` call.
-        buf = buf_write.into_inner();
     }
 }
 
@@ -245,12 +144,6 @@ async fn transfer_monitor(
     }
 }
 
-async fn dummy_thread() -> Result<()> {
-    loop {
-        sleep(Duration::from_secs(3600)).await;
-    }
-}
-
 async fn flatten<T>(handle: &mut JoinHandle<Result<T>>) -> Result<T> {
     match handle.await {
         Ok(Ok(result)) => Ok(result),
@@ -264,7 +157,6 @@ pub async fn io_loop(
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
     read_timeout: Duration,
-    full_frames: bool,
     mitm: bool,
     dpi: Option<u16>,
     developer_mode: bool,
@@ -337,73 +229,49 @@ pub async fn io_loop(
         let mut from_stream;
         let mut reader_hu;
         let mut reader_md;
-        if mitm || full_frames {
-            // MITM/proxy mpsc channels:
-            let (tx_hu, rx_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-            let (tx_md, rx_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-            let (txr_hu, rxr_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-            let (txr_md, rxr_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
 
-            // dedicated reading threads:
-            reader_hu = tokio_uring::spawn(endpoint_reader(file.clone(), txr_hu));
-            reader_md = tokio_uring::spawn(endpoint_reader(stream.clone(), txr_md));
-            // main processing threads:
-            from_file = tokio_uring::spawn(proxy(
-                ProxyType::HeadUnit,
-                file.clone(),
-                stream_bytes.clone(),
-                tx_hu,
-                rx_hu,
-                rxr_md,
-                dpi,
-                developer_mode,
-                disable_media_sink,
-                disable_tts_sink,
-                remove_tap_restriction,
-                video_in_motion,
-                full_frames,
-                hex_requested,
-            ));
-            from_stream = tokio_uring::spawn(proxy(
-                ProxyType::MobileDevice,
-                stream.clone(),
-                file_bytes.clone(),
-                tx_md,
-                rx_md,
-                rxr_hu,
-                dpi,
-                developer_mode,
-                disable_media_sink,
-                disable_tts_sink,
-                remove_tap_restriction,
-                video_in_motion,
-                full_frames,
-                hex_requested,
-            ));
-        } else {
-            // We need to copy in both directions...
-            from_file = tokio_uring::spawn(copy(
-                file.clone(),
-                stream.clone(),
-                "USB",
-                "TCP",
-                stream_bytes.clone(),
-                read_timeout,
-                false,
-            ));
-            from_stream = tokio_uring::spawn(copy(
-                stream.clone(),
-                file.clone(),
-                "TCP",
-                "USB",
-                file_bytes.clone(),
-                read_timeout,
-                full_frames,
-            ));
-            // dummy threads which doesn't do anything:
-            reader_hu = tokio::spawn(dummy_thread());
-            reader_md = tokio::spawn(dummy_thread());
-        }
+        // MITM/proxy mpsc channels:
+        let (tx_hu, rx_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (tx_md, rx_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (txr_hu, rxr_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (txr_md, rxr_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+
+        // dedicated reading threads:
+        reader_hu = tokio_uring::spawn(endpoint_reader(file.clone(), txr_hu));
+        reader_md = tokio_uring::spawn(endpoint_reader(stream.clone(), txr_md));
+        // main processing threads:
+        from_file = tokio_uring::spawn(proxy(
+            ProxyType::HeadUnit,
+            file.clone(),
+            stream_bytes.clone(),
+            tx_hu,
+            rx_hu,
+            rxr_md,
+            dpi,
+            developer_mode,
+            disable_media_sink,
+            disable_tts_sink,
+            remove_tap_restriction,
+            video_in_motion,
+            !mitm,
+            hex_requested,
+        ));
+        from_stream = tokio_uring::spawn(proxy(
+            ProxyType::MobileDevice,
+            stream.clone(),
+            file_bytes.clone(),
+            tx_md,
+            rx_md,
+            rxr_hu,
+            dpi,
+            developer_mode,
+            disable_media_sink,
+            disable_tts_sink,
+            remove_tap_restriction,
+            video_in_motion,
+            !mitm,
+            hex_requested,
+        ));
 
         // Thread for monitoring transfer
         let mut monitor = tokio::spawn(transfer_monitor(

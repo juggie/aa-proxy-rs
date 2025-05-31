@@ -155,7 +155,6 @@ Options:
   -b, --btalias <BTALIAS>              BLE device name
   -k, --keepalive                      Keep alive mode: BLE adapter doesn't turn off after successful connection, so that the phone can remain connected (used in special configurations)
   -t, --timeout-secs <SECONDS>         Data transfer timeout [default: 10]
-  -f, --full-frames                    Pass only complete frames during data transfer to the headunit
   -m, --mitm                           Enable MITM mode (experimental)
       --dpi <DPI>                      MITM: Force DPI (experimental)
       --remove-tap-restriction         MITM: remove tap restriction
