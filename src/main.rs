@@ -1,7 +1,9 @@
+mod aoa;
 mod bluetooth;
 mod io_uring;
 mod mitm;
 mod usb_gadget;
+mod usb_stream;
 
 use bluer::Address;
 use bluetooth::bluetooth_setup_connection;
@@ -27,6 +29,7 @@ const NAME: &str = "<i><bright-black> main: </>";
 
 const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
 const TCP_SERVER_PORT: i32 = 5288;
+const TCP_DHU_PORT: i32 = 5277;
 
 #[derive(clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub enum HexdumpLevel {
@@ -237,48 +240,64 @@ async fn tokio_main(args: Args, need_restart: Arc<Notify>, tcp_start: Arc<Notify
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
-    if args.legacy {
-        // start uevent listener in own task
-        std::thread::spawn(|| uevent_listener(accessory_started_cloned));
+    let wifi_conf = {
+        if !args.wired {
+            Some(init_wifi_config(&args.iface, args.hostapd_conf))
+        } else {
+            None
+        }
+    };
+    let mut usb = None;
+    if !args.dhu {
+        if args.legacy {
+            // start uevent listener in own task
+            std::thread::spawn(|| uevent_listener(accessory_started_cloned));
+        }
+        usb = Some(UsbGadgetState::new(args.legacy, args.udc));
     }
-
-    let wifi_conf = init_wifi_config(&args.iface, args.hostapd_conf);
-    let mut usb = UsbGadgetState::new(args.legacy, args.udc);
     loop {
-        if let Err(e) = usb.init() {
-            error!("{} 🔌 USB init error: {}", NAME, e);
+        if let Some(ref mut usb) = usb {
+            if let Err(e) = usb.init() {
+                error!("{} 🔌 USB init error: {}", NAME, e);
+            }
         }
 
-        let bt_stop;
-        loop {
-            match bluetooth_setup_connection(
-                args.advertise,
-                args.btalias.clone(),
-                args.connect,
-                wifi_conf.clone(),
-                tcp_start.clone(),
-                args.keepalive,
-            )
-            .await
-            {
-                Ok(state) => {
-                    // we're ready, gracefully shutdown bluetooth in task
-                    bt_stop = tokio::spawn(async move { bluetooth_stop(state).await });
-                    break;
-                }
-                Err(e) => {
-                    error!("{} Bluetooth error: {}", NAME, e);
-                    info!("{} Trying to recover...", NAME);
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let mut bt_stop = None;
+        if let Some(ref wifi_conf) = wifi_conf {
+            loop {
+                match bluetooth_setup_connection(
+                    args.advertise,
+                    args.btalias.clone(),
+                    args.connect,
+                    wifi_conf.clone(),
+                    tcp_start.clone(),
+                    args.keepalive,
+                )
+                .await
+                {
+                    Ok(state) => {
+                        // we're ready, gracefully shutdown bluetooth in task
+                        bt_stop = Some(tokio::spawn(async move { bluetooth_stop(state).await }));
+                        break;
+                    }
+                    Err(e) => {
+                        error!("{} Bluetooth error: {}", NAME, e);
+                        info!("{} Trying to recover...", NAME);
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    }
                 }
             }
         }
 
-        usb.enable_default_and_wait_for_accessory(accessory_started.clone())
-            .await;
+        if let Some(ref mut usb) = usb {
+            usb.enable_default_and_wait_for_accessory(accessory_started.clone())
+                .await;
+        }
 
-        // wait for bluetooth stop properly
-        let _ = bt_stop.await;
+        if let Some(bt_stop) = bt_stop {
+            // wait for bluetooth stop properly
+            let _ = bt_stop.await;
+        }
 
         // wait for restart
         need_restart.notified().await;

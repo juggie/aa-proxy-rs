@@ -1,4 +1,3 @@
-use crate::TCP_SERVER_PORT;
 use bytesize::ByteSize;
 use humantime::format_duration;
 use simplelog::*;
@@ -39,6 +38,7 @@ use crate::mitm::ProxyType;
 use crate::usb_stream;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 use crate::HexdumpLevel;
+use crate::{TCP_DHU_PORT, TCP_SERVER_PORT};
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
 // read and write calls:
@@ -204,47 +204,76 @@ pub async fn io_loop(
     wired: bool,
     dhu: bool,
 ) -> Result<()> {
-    info!("{} 🛰️ Starting TCP server...", NAME);
-    let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
-    let listener = TcpListener::bind(bind_addr).unwrap();
-    info!("{} 🛰️ TCP server bound to: <u>{}</u>", NAME, bind_addr);
-    loop {
-        info!("{} 💤 waiting for bluetooth handshake...", NAME);
-        tcp_start.notified().await;
+    // prepare/bind needed TCP listeners
+    let mut dhu_listener = None;
+    let mut md_listener = None;
+    if !wired {
+        info!("{} 🛰️ Starting TCP server for MD...", NAME);
+        let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
+        md_listener = Some(TcpListener::bind(bind_addr).unwrap());
+        info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);
+    }
+    if dhu {
+        info!("{} 🛰️ Starting TCP server for DHU...", NAME);
+        let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
+        dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+        info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
+    }
 
-        // Asynchronously wait for an inbound TCP connection
-        info!("{} 🛰️ TCP server: listening for phone connection...", NAME);
-        let retval = listener.accept();
-        let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
-            .await
-            .map_err(|e| std::io::Error::other(e))
-        {
-            Ok(Ok((stream, addr))) => (stream, addr),
-            Err(e) | Ok(Err(e)) => {
-                error!("{} 📵 TCP server: {}, restarting...", NAME, e);
+    loop {
+        let mut md_tcp = None;
+        let mut md_usb = None;
+        let mut hu_tcp = None;
+        let mut hu_usb = None;
+        if wired {
+            info!(
+                "{} 💤 trying to enable Android Auto mode on USB port...",
+                NAME
+            );
+            md_usb = Some(usb_stream::new().await.unwrap());
+        } else {
+            info!("{} 💤 waiting for bluetooth handshake...", NAME);
+            tcp_start.notified().await;
+
+            info!(
+                "{} 🛰️ MD TCP server: listening for phone connection...",
+                NAME
+            );
+            if let Ok(s) = tcp_wait_for_connection(&mut md_listener.as_mut().unwrap()).await {
+                md_tcp = Some(s);
+            } else {
                 // notify main loop to restart
                 need_restart.notify_one();
                 continue;
             }
-        };
-        info!(
-            "{} 📳 TCP server: new client connected: <b>{:?}</b>",
-            NAME, addr
-        );
-        // disable Nagle algorithm, so segments are always sent as soon as possible,
-        // even if there is only a small amount of data
-        stream.set_nodelay(true)?;
+        }
 
-        info!(
-            "{} 📂 Opening USB accessory device: <u>{}</u>",
-            NAME, USB_ACCESSORY_PATH
-        );
-        let usb = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(false)
-            .open(USB_ACCESSORY_PATH)
-            .await?;
+        if dhu {
+            info!(
+                "{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",
+                NAME
+            );
+            if let Ok(s) = tcp_wait_for_connection(&mut dhu_listener.as_mut().unwrap()).await {
+                hu_tcp = Some(s);
+            } else {
+                // notify main loop to restart
+                need_restart.notify_one();
+                continue;
+            }
+        } else {
+            info!(
+                "{} 📂 Opening USB accessory device: <u>{}</u>",
+                NAME, USB_ACCESSORY_PATH
+            );
+            hu_usb = Some(
+                OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(false)
+                    .open(USB_ACCESSORY_PATH)
+                    .await?,
+            );
+        }
 
         info!("{} ♾️ Starting to proxy data between HU and MD...", NAME);
         let started = Instant::now();
@@ -256,9 +285,7 @@ pub async fn io_loop(
         // we can send a reference-counted version of it. also, since a
         // tokio-uring runtime is single-threaded, we can use `Rc` instead of
         // `Arc`.
-        let file = Rc::new(usb);
         let file_bytes = Arc::new(AtomicUsize::new(0));
-        let stream = Rc::new(stream);
         let stream_bytes = Arc::new(AtomicUsize::new(0));
 
         let mut from_file;
@@ -272,13 +299,46 @@ pub async fn io_loop(
         let (txr_hu, rxr_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
         let (txr_md, rxr_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
 
+        // selecting I/O device for reading and writing
+        // and creating desired objects for proxy functions
+        let hu_r;
+        let md_r;
+        let hu_w;
+        let md_w;
+        // MD transfer device
+        if let Some(md) = md_usb {
+            // MD over wired USB
+            let (usb_r, usb_w) = md;
+            let usb_r = Rc::new(RefCell::new(usb_r));
+            let usb_w = Rc::new(RefCell::new(usb_w));
+            md_r = IoDevice::UsbReader(usb_r, PhantomData::<TcpStream>);
+            md_w = IoDevice::UsbWriter(usb_w, PhantomData::<TcpStream>);
+        } else {
+            // MD using TCP stream (wireless)
+            let md = Rc::new(md_tcp.unwrap());
+            md_r = IoDevice::EndpointIo(md.clone());
+            md_w = IoDevice::EndpointIo(md.clone());
+        }
+        // HU transfer device
+        if let Some(hu) = hu_usb {
+            // HU connected directly via USB
+            let hu = Rc::new(hu);
+            hu_r = IoDevice::EndpointIo(hu.clone());
+            hu_w = IoDevice::EndpointIo(hu.clone());
+        } else {
+            // Head Unit Emulator via TCP
+            let hu = Rc::new(hu_tcp.unwrap());
+            hu_r = IoDevice::TcpStreamIo(hu.clone());
+            hu_w = IoDevice::TcpStreamIo(hu.clone());
+        }
+
         // dedicated reading threads:
-        reader_hu = tokio_uring::spawn(endpoint_reader(file.clone(), txr_hu));
-        reader_md = tokio_uring::spawn(endpoint_reader(stream.clone(), txr_md));
+        reader_hu = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
+        reader_md = tokio_uring::spawn(endpoint_reader(md_r, txr_md));
         // main processing threads:
         from_file = tokio_uring::spawn(proxy(
             ProxyType::HeadUnit,
-            file.clone(),
+            hu_w,
             stream_bytes.clone(),
             tx_hu,
             rx_hu,
@@ -294,7 +354,7 @@ pub async fn io_loop(
         ));
         from_stream = tokio_uring::spawn(proxy(
             ProxyType::MobileDevice,
-            stream.clone(),
+            md_w,
             file_bytes.clone(),
             tx_md,
             rx_md,
