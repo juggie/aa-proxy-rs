@@ -162,7 +162,7 @@ Options:
       --disable-media-sink             MITM: Disable media sink
       --disable-tts-sink               MITM: Disable TTS sink
       --developer-mode                 MITM: Developer mode
-  -w, --wired                          MITM: Enable wired USB connection with phone
+  -w, --wired                          Enable wired USB connection with phone
       --dhu                            Use a Google Android Auto Desktop Head Unit emulator instead of real HU device (will listen on TCP 5277 port)
   -h, --help                           Print help
   -V, --version                        Print version

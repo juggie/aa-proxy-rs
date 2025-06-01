@@ -129,8 +129,8 @@ struct Args {
     #[clap(long, requires("mitm"))]
     developer_mode: bool,
 
-    /// MITM: Enable wired USB connection with phone
-    #[clap(short, long, requires("mitm"))]
+    /// Enable wired USB connection with phone
+    #[clap(short, long)]
     wired: bool,
 
     /// Use a Google Android Auto Desktop Head Unit emulator
