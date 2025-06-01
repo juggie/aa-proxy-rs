@@ -2,6 +2,8 @@ use crate::TCP_SERVER_PORT;
 use bytesize::ByteSize;
 use humantime::format_duration;
 use simplelog::*;
+use std::cell::RefCell;
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -34,6 +36,8 @@ use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
 use crate::mitm::Packet;
 use crate::mitm::ProxyType;
+use crate::usb_stream;
+use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 use crate::HexdumpLevel;
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
@@ -67,6 +71,13 @@ impl Endpoint<TcpStream> for TcpStream {
     fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T> {
         self.write(buf)
     }
+}
+
+pub enum IoDevice<A: Endpoint<A>> {
+    UsbReader(Rc<RefCell<UsbStreamRead>>, PhantomData<A>),
+    UsbWriter(Rc<RefCell<UsbStreamWrite>>, PhantomData<A>),
+    EndpointIo(Rc<A>),
+    TcpStreamIo(Rc<TcpStream>),
 }
 
 async fn transfer_monitor(
