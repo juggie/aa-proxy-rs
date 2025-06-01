@@ -19,6 +19,8 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
   - Disable TTS sink
   - Video in motion
   - Developer mode
+  - Wired USB connection mode (without Bluetooth handshake and WiFi)
+- Google `Desktop Head Unit` emulator support for debugging purposes
 
 ## Current project status
 Now after a lot of stress-testing and coding I think the project has matured enough, that I can say that the main stability goal was reached.
@@ -153,7 +155,6 @@ Options:
   -b, --btalias <BTALIAS>              BLE device name
   -k, --keepalive                      Keep alive mode: BLE adapter doesn't turn off after successful connection, so that the phone can remain connected (used in special configurations)
   -t, --timeout-secs <SECONDS>         Data transfer timeout [default: 10]
-  -f, --full-frames                    Pass only complete frames during data transfer to the headunit
   -m, --mitm                           Enable MITM mode (experimental)
       --dpi <DPI>                      MITM: Force DPI (experimental)
       --remove-tap-restriction         MITM: remove tap restriction
@@ -161,6 +162,8 @@ Options:
       --disable-media-sink             MITM: Disable media sink
       --disable-tts-sink               MITM: Disable TTS sink
       --developer-mode                 MITM: Developer mode
+  -w, --wired                          Enable wired USB connection with phone
+      --dhu                            Use a Google Android Auto Desktop Head Unit emulator instead of real HU device (will listen on TCP 5277 port)
   -h, --help                           Print help
   -V, --version                        Print version
 ```

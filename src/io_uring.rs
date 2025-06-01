@@ -1,7 +1,8 @@
-use crate::TCP_SERVER_PORT;
 use bytesize::ByteSize;
 use humantime::format_duration;
 use simplelog::*;
+use std::cell::RefCell;
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -34,10 +35,10 @@ use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
 use crate::mitm::Packet;
 use crate::mitm::ProxyType;
-use crate::mitm::FRAME_TYPE_FIRST;
-use crate::mitm::FRAME_TYPE_MASK;
-use crate::mitm::HEADER_LENGTH;
+use crate::usb_stream;
+use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 use crate::HexdumpLevel;
+use crate::{TCP_DHU_PORT, TCP_SERVER_PORT};
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
 // read and write calls:
@@ -72,102 +73,11 @@ impl Endpoint<TcpStream> for TcpStream {
     }
 }
 
-async fn copy<A: Endpoint<A>, B: Endpoint<B>>(
-    from: Rc<A>,
-    to: Rc<B>,
-    dbg_name_from: &'static str,
-    dbg_name_to: &'static str,
-    bytes_written: Arc<AtomicUsize>,
-    read_timeout: Duration,
-    full_frames: bool,
-) -> Result<()> {
-    let mut buf = vec![0u8; BUFFER_LEN];
-    loop {
-        // things look weird: we pass ownership of the buffer to `read`, and we get
-        // it back, _even if there was an error_. There's a whole trait for that,
-        // which `Vec<u8>` implements!
-        debug!("{}: before read", dbg_name_from);
-        let slice = {
-            if full_frames {
-                // first: read only the header
-                buf.slice(..HEADER_LENGTH)
-            } else {
-                buf.slice(..)
-            }
-        };
-        let retval = from.read(slice);
-        let (res, buf_read) = timeout(read_timeout, retval)
-            .await
-            .map_err(|e| -> String { format!("{} read: {}", dbg_name_from, e) })?;
-        // Propagate errors, see how many bytes we read
-        let mut n = res?;
-        debug!("{}: after read, {} bytes", dbg_name_from, n);
-        if n == 0 {
-            // A read of size zero signals EOF (end of file), finish gracefully
-            return Ok(());
-        }
-        buf = buf_read.into_inner();
-
-        // full message handling
-        if full_frames {
-            if n != HEADER_LENGTH {
-                // this is unexpected
-                return Ok(());
-            }
-            // compute message length
-            let mut message_length = (buf[3] as u16 + ((buf[2] as u16) << 8)) as usize;
-
-            if (buf[1] & FRAME_TYPE_MASK) == FRAME_TYPE_FIRST {
-                // This means the header is 8 bytes long, we need to read four more bytes.
-                message_length += 4;
-            }
-            if (HEADER_LENGTH + message_length) > BUFFER_LEN {
-                // Not enough space in the buffer. This is unexpected.
-                panic!("Not enough space in the buffer");
-            }
-
-            let mut remain = message_length;
-            // continue reading the rest of the message
-            while remain > 0 {
-                debug!(
-                    "{}: before read to end, computed message_length = {}, remain = {}",
-                    dbg_name_from, message_length, remain
-                );
-                let retval = from.read(buf.slice(n..n + remain));
-                let (res, chunk) = timeout(read_timeout, retval)
-                    .await
-                    .map_err(|e| -> String { format!("{} read to end: {}", dbg_name_from, e) })?;
-                // Propagate errors, see how many bytes we read
-                let len = res?;
-                debug!("{}: after read to end, {} bytes", dbg_name_from, len);
-                if len == 0 {
-                    // A read of size zero signals EOF (end of file), finish gracefully
-                    return Ok(());
-                }
-                remain -= len;
-                n += len;
-                buf = chunk.into_inner();
-            }
-        }
-
-        // The `slice` method here is implemented in an extension trait: it
-        // returns an owned slice of our `Vec<u8>`, which we later turn back
-        // into the full `Vec<u8>`
-        debug!("{}: before write {} bytes", dbg_name_to, n);
-        let retval = to.write(buf.slice(..n)).submit();
-        let (res, buf_write) = timeout(read_timeout, retval)
-            .await
-            .map_err(|e| -> String { format!("{} write: {}", dbg_name_to, e) })?;
-        let n = res?;
-        debug!("{}: after write, {} bytes", dbg_name_to, n);
-        // Increment byte counters for statistics
-        bytes_written.fetch_add(n, Ordering::Relaxed);
-
-        // Later is now, we want our full buffer back.
-        // That's why we declared our binding `mut` way back at the start of `copy`,
-        // even though we moved it into the very first `TcpStream::read` call.
-        buf = buf_write.into_inner();
-    }
+pub enum IoDevice<A: Endpoint<A>> {
+    UsbReader(Rc<RefCell<UsbStreamRead>>, PhantomData<A>),
+    UsbWriter(Rc<RefCell<UsbStreamWrite>>, PhantomData<A>),
+    EndpointIo(Rc<A>),
+    TcpStreamIo(Rc<TcpStream>),
 }
 
 async fn transfer_monitor(
@@ -245,12 +155,6 @@ async fn transfer_monitor(
     }
 }
 
-async fn dummy_thread() -> Result<()> {
-    loop {
-        sleep(Duration::from_secs(3600)).await;
-    }
-}
-
 async fn flatten<T>(handle: &mut JoinHandle<Result<T>>) -> Result<T> {
     match handle.await {
         Ok(Ok(result)) => Ok(result),
@@ -259,12 +163,36 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>) -> Result<T> {
     }
 }
 
+/// Asynchronously wait for an inbound TCP connection
+/// returning TcpStream of first client connected
+async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream> {
+    let retval = listener.accept();
+    let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
+        .await
+        .map_err(|e| std::io::Error::other(e))
+    {
+        Ok(Ok((stream, addr))) => (stream, addr),
+        Err(e) | Ok(Err(e)) => {
+            error!("{} 📵 TCP server: {}, restarting...", NAME, e);
+            return Err(Box::new(e));
+        }
+    };
+    info!(
+        "{} 📳 TCP server: new client connected: <b>{:?}</b>",
+        NAME, addr
+    );
+    // disable Nagle algorithm, so segments are always sent as soon as possible,
+    // even if there is only a small amount of data
+    stream.set_nodelay(true)?;
+
+    Ok(stream)
+}
+
 pub async fn io_loop(
     stats_interval: Option<Duration>,
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
     read_timeout: Duration,
-    full_frames: bool,
     mitm: bool,
     dpi: Option<u16>,
     developer_mode: bool,
@@ -273,50 +201,81 @@ pub async fn io_loop(
     remove_tap_restriction: bool,
     video_in_motion: bool,
     hex_requested: HexdumpLevel,
+    wired: bool,
+    dhu: bool,
 ) -> Result<()> {
-    info!("{} 🛰️ Starting TCP server...", NAME);
-    let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
-    let listener = TcpListener::bind(bind_addr).unwrap();
-    info!("{} 🛰️ TCP server bound to: <u>{}</u>", NAME, bind_addr);
-    loop {
-        info!("{} 💤 waiting for bluetooth handshake...", NAME);
-        tcp_start.notified().await;
+    // prepare/bind needed TCP listeners
+    let mut dhu_listener = None;
+    let mut md_listener = None;
+    if !wired {
+        info!("{} 🛰️ Starting TCP server for MD...", NAME);
+        let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
+        md_listener = Some(TcpListener::bind(bind_addr).unwrap());
+        info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);
+    }
+    if dhu {
+        info!("{} 🛰️ Starting TCP server for DHU...", NAME);
+        let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
+        dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+        info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
+    }
 
-        // Asynchronously wait for an inbound TCP connection
-        info!("{} 🛰️ TCP server: listening for phone connection...", NAME);
-        let retval = listener.accept();
-        let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
-            .await
-            .map_err(|e| std::io::Error::other(e))
-        {
-            Ok(Ok((stream, addr))) => (stream, addr),
-            Err(e) | Ok(Err(e)) => {
-                error!("{} 📵 TCP server: {}, restarting...", NAME, e);
+    loop {
+        let mut md_tcp = None;
+        let mut md_usb = None;
+        let mut hu_tcp = None;
+        let mut hu_usb = None;
+        if wired {
+            info!(
+                "{} 💤 trying to enable Android Auto mode on USB port...",
+                NAME
+            );
+            md_usb = Some(usb_stream::new().await.unwrap());
+        } else {
+            info!("{} 💤 waiting for bluetooth handshake...", NAME);
+            tcp_start.notified().await;
+
+            info!(
+                "{} 🛰️ MD TCP server: listening for phone connection...",
+                NAME
+            );
+            if let Ok(s) = tcp_wait_for_connection(&mut md_listener.as_mut().unwrap()).await {
+                md_tcp = Some(s);
+            } else {
                 // notify main loop to restart
                 need_restart.notify_one();
                 continue;
             }
-        };
-        info!(
-            "{} 📳 TCP server: new client connected: <b>{:?}</b>",
-            NAME, addr
-        );
-        // disable Nagle algorithm, so segments are always sent as soon as possible,
-        // even if there is only a small amount of data
-        stream.set_nodelay(true)?;
+        }
 
-        info!(
-            "{} 📂 Opening USB accessory device: <u>{}</u>",
-            NAME, USB_ACCESSORY_PATH
-        );
-        let usb = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(false)
-            .open(USB_ACCESSORY_PATH)
-            .await?;
+        if dhu {
+            info!(
+                "{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",
+                NAME
+            );
+            if let Ok(s) = tcp_wait_for_connection(&mut dhu_listener.as_mut().unwrap()).await {
+                hu_tcp = Some(s);
+            } else {
+                // notify main loop to restart
+                need_restart.notify_one();
+                continue;
+            }
+        } else {
+            info!(
+                "{} 📂 Opening USB accessory device: <u>{}</u>",
+                NAME, USB_ACCESSORY_PATH
+            );
+            hu_usb = Some(
+                OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(false)
+                    .open(USB_ACCESSORY_PATH)
+                    .await?,
+            );
+        }
 
-        info!("{} ♾️ Starting to proxy data between TCP and USB...", NAME);
+        info!("{} ♾️ Starting to proxy data between HU and MD...", NAME);
         let started = Instant::now();
 
         // `read` and `write` take owned buffers (more on that later), and
@@ -326,82 +285,89 @@ pub async fn io_loop(
         // we can send a reference-counted version of it. also, since a
         // tokio-uring runtime is single-threaded, we can use `Rc` instead of
         // `Arc`.
-        let file = Rc::new(usb);
         let file_bytes = Arc::new(AtomicUsize::new(0));
-        let stream = Rc::new(stream);
         let stream_bytes = Arc::new(AtomicUsize::new(0));
 
         let mut from_file;
         let mut from_stream;
         let mut reader_hu;
         let mut reader_md;
-        if mitm || full_frames {
-            // MITM/proxy mpsc channels:
-            let (tx_hu, rx_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-            let (tx_md, rx_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-            let (txr_hu, rxr_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-            let (txr_md, rxr_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
 
-            // dedicated reading threads:
-            reader_hu = tokio_uring::spawn(endpoint_reader(file.clone(), txr_hu));
-            reader_md = tokio_uring::spawn(endpoint_reader(stream.clone(), txr_md));
-            // main processing threads:
-            from_file = tokio_uring::spawn(proxy(
-                ProxyType::HeadUnit,
-                file.clone(),
-                stream_bytes.clone(),
-                tx_hu,
-                rx_hu,
-                rxr_md,
-                dpi,
-                developer_mode,
-                disable_media_sink,
-                disable_tts_sink,
-                remove_tap_restriction,
-                video_in_motion,
-                full_frames,
-                hex_requested,
-            ));
-            from_stream = tokio_uring::spawn(proxy(
-                ProxyType::MobileDevice,
-                stream.clone(),
-                file_bytes.clone(),
-                tx_md,
-                rx_md,
-                rxr_hu,
-                dpi,
-                developer_mode,
-                disable_media_sink,
-                disable_tts_sink,
-                remove_tap_restriction,
-                video_in_motion,
-                full_frames,
-                hex_requested,
-            ));
+        // MITM/proxy mpsc channels:
+        let (tx_hu, rx_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (tx_md, rx_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (txr_hu, rxr_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (txr_md, rxr_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+
+        // selecting I/O device for reading and writing
+        // and creating desired objects for proxy functions
+        let hu_r;
+        let md_r;
+        let hu_w;
+        let md_w;
+        // MD transfer device
+        if let Some(md) = md_usb {
+            // MD over wired USB
+            let (usb_r, usb_w) = md;
+            let usb_r = Rc::new(RefCell::new(usb_r));
+            let usb_w = Rc::new(RefCell::new(usb_w));
+            md_r = IoDevice::UsbReader(usb_r, PhantomData::<TcpStream>);
+            md_w = IoDevice::UsbWriter(usb_w, PhantomData::<TcpStream>);
         } else {
-            // We need to copy in both directions...
-            from_file = tokio_uring::spawn(copy(
-                file.clone(),
-                stream.clone(),
-                "USB",
-                "TCP",
-                stream_bytes.clone(),
-                read_timeout,
-                false,
-            ));
-            from_stream = tokio_uring::spawn(copy(
-                stream.clone(),
-                file.clone(),
-                "TCP",
-                "USB",
-                file_bytes.clone(),
-                read_timeout,
-                full_frames,
-            ));
-            // dummy threads which doesn't do anything:
-            reader_hu = tokio::spawn(dummy_thread());
-            reader_md = tokio::spawn(dummy_thread());
+            // MD using TCP stream (wireless)
+            let md = Rc::new(md_tcp.unwrap());
+            md_r = IoDevice::EndpointIo(md.clone());
+            md_w = IoDevice::EndpointIo(md.clone());
         }
+        // HU transfer device
+        if let Some(hu) = hu_usb {
+            // HU connected directly via USB
+            let hu = Rc::new(hu);
+            hu_r = IoDevice::EndpointIo(hu.clone());
+            hu_w = IoDevice::EndpointIo(hu.clone());
+        } else {
+            // Head Unit Emulator via TCP
+            let hu = Rc::new(hu_tcp.unwrap());
+            hu_r = IoDevice::TcpStreamIo(hu.clone());
+            hu_w = IoDevice::TcpStreamIo(hu.clone());
+        }
+
+        // dedicated reading threads:
+        reader_hu = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
+        reader_md = tokio_uring::spawn(endpoint_reader(md_r, txr_md));
+        // main processing threads:
+        from_file = tokio_uring::spawn(proxy(
+            ProxyType::HeadUnit,
+            hu_w,
+            stream_bytes.clone(),
+            tx_hu,
+            rx_hu,
+            rxr_md,
+            dpi,
+            developer_mode,
+            disable_media_sink,
+            disable_tts_sink,
+            remove_tap_restriction,
+            video_in_motion,
+            !mitm,
+            hex_requested,
+        ));
+        from_stream = tokio_uring::spawn(proxy(
+            ProxyType::MobileDevice,
+            md_w,
+            file_bytes.clone(),
+            tx_md,
+            rx_md,
+            rxr_hu,
+            dpi,
+            developer_mode,
+            disable_media_sink,
+            disable_tts_sink,
+            remove_tap_restriction,
+            video_in_motion,
+            !mitm,
+            hex_requested,
+        ));
 
         // Thread for monitoring transfer
         let mut monitor = tokio::spawn(transfer_monitor(

@@ -4,11 +4,12 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{Read, Write};
-use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
@@ -24,6 +25,7 @@ use protobuf::{Enum, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
 use crate::io_uring::Endpoint;
+use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
 use crate::HexdumpLevel;
 
@@ -150,7 +152,7 @@ impl Packet {
     /// composes a final frame and transmits it to endpoint device (HU/MD)
     async fn transmit<A: Endpoint<A>>(
         &self,
-        device: &mut Rc<A>,
+        device: &mut IoDevice<A>,
     ) -> std::result::Result<usize, std::io::Error> {
         let len = self.payload.len() as u16;
         let mut frame: Vec<u8> = vec![];
@@ -165,8 +167,22 @@ impl Packet {
             frame.push((final_len >> 8) as u8);
             frame.push((final_len & 0xff) as u8);
         }
-        frame.append(&mut self.payload.clone());
-        device.write(frame).submit().await.0
+        match device {
+            IoDevice::UsbWriter(device, _) => {
+                frame.append(&mut self.payload.clone());
+                let mut dev = device.borrow_mut();
+                dev.write(&frame).await
+            }
+            IoDevice::EndpointIo(device) => {
+                frame.append(&mut self.payload.clone());
+                device.write(frame).submit().await.0
+            }
+            IoDevice::TcpStreamIo(device) => {
+                frame.append(&mut self.payload.clone());
+                device.write(frame).submit().await.0
+            }
+            _ => todo!(),
+        }
     }
 
     /// decapsulates SSL payload and writes to SslStream
@@ -203,6 +219,10 @@ pub async fn pkt_debug(
         return Ok(());
     }
 
+    // if for some reason we have too small packet, bail out
+    if pkt.payload.len() < 2 {
+        return Ok(());
+    }
     // message_id is the first 2 bytes of payload
     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
 
@@ -441,12 +461,32 @@ async fn ssl_builder(proxy_type: ProxyType) -> Result<Ssl> {
 }
 
 /// reads all available data to VecDeque
-async fn read_input_data<A: Endpoint<A>>(rbuf: &mut VecDeque<u8>, device: Rc<A>) -> Result<()> {
-    let newdata = vec![0u8; BUFFER_LEN];
-    let retval = device.read(newdata);
-    let (n, newdata) = timeout(Duration::from_millis(15000), retval)
-        .await
-        .map_err(|_| -> String { format!("read_input_data: timeout") })?;
+async fn read_input_data<A: Endpoint<A>>(
+    rbuf: &mut VecDeque<u8>,
+    obj: &mut IoDevice<A>,
+) -> Result<()> {
+    let mut newdata = vec![0u8; BUFFER_LEN];
+    let n;
+    match obj {
+        IoDevice::UsbReader(device, _) => {
+            let mut dev = device.borrow_mut();
+            let retval = dev.read(&mut newdata);
+            n = retval.await;
+        }
+        IoDevice::EndpointIo(device) => {
+            let retval = device.read(newdata);
+            (n, newdata) = timeout(Duration::from_millis(15000), retval)
+                .await
+                .map_err(|_| -> String { format!("read_input_data: timeout") })?;
+        }
+        IoDevice::TcpStreamIo(device) => {
+            let retval = device.read(newdata);
+            (n, newdata) = timeout(Duration::from_millis(15000), retval)
+                .await
+                .map_err(|_| -> String { format!("read_input_data: timeout") })?;
+        }
+        _ => todo!(),
+    }
     let n = n?;
     if n > 0 {
         rbuf.write(&newdata.slice(..n))?;
@@ -455,10 +495,13 @@ async fn read_input_data<A: Endpoint<A>>(rbuf: &mut VecDeque<u8>, device: Rc<A>)
 }
 
 /// main reader thread for a device
-pub async fn endpoint_reader<A: Endpoint<A>>(device: Rc<A>, tx: Sender<Packet>) -> Result<()> {
+pub async fn endpoint_reader<A: Endpoint<A>>(
+    mut device: IoDevice<A>,
+    tx: Sender<Packet>,
+) -> Result<()> {
     let mut rbuf: VecDeque<u8> = VecDeque::new();
     loop {
-        read_input_data(&mut rbuf, device.clone()).await?;
+        read_input_data(&mut rbuf, &mut device).await?;
         // check if we have complete packet available
         loop {
             if rbuf.len() > HEADER_LENGTH {
@@ -519,7 +562,7 @@ fn ssl_check_failure<T>(res: std::result::Result<T, openssl::ssl::Error>) -> Res
 /// main thread doing all packet processing of an endpoint/device
 pub async fn proxy<A: Endpoint<A> + 'static>(
     proxy_type: ProxyType,
-    mut device: Rc<A>,
+    mut device: IoDevice<A>,
     bytes_written: Arc<AtomicUsize>,
     tx: Sender<Packet>,
     mut rx: Receiver<Packet>,
