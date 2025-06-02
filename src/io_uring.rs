@@ -230,7 +230,17 @@ pub async fn io_loop(
                 "{} 💤 trying to enable Android Auto mode on USB port...",
                 NAME
             );
-            md_usb = Some(usb_stream::new().await.unwrap());
+            match usb_stream::new().await {
+                Err(e) => {
+                    error!("{} 🔴 Enabling Android Auto: {}", NAME, e);
+                    // notify main loop to restart
+                    need_restart.notify_one();
+                    continue;
+                }
+                Ok(s) => {
+                    md_usb = Some(s);
+                }
+            }
         } else {
             info!("{} 💤 waiting for bluetooth handshake...", NAME);
             tcp_start.notified().await;
