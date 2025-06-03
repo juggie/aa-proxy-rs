@@ -5,9 +5,9 @@ use std::ffi::{CString, NulError};
 use std::time::Duration;
 
 use byteorder::{ByteOrder, LittleEndian};
-use futures::executor::block_on;
-use nusb::descriptors::Configuration;
-use nusb::transfer::{ControlIn, ControlOut, ControlType, Direction, EndpointType, Recipient};
+use nusb::descriptors::{ConfigurationDescriptor, TransferType};
+use nusb::transfer::{ControlIn, ControlOut, ControlType, Direction, Recipient};
+use nusb::MaybeFuture;
 use nusb::{DeviceInfo, Interface};
 use thiserror::Error;
 
@@ -90,14 +90,14 @@ pub trait AccessoryConfigurations {
     fn find_endpoints(&self) -> Result<Endpoints, EndpointError>;
 }
 
-impl AccessoryConfigurations for Configuration<'_> {
+impl AccessoryConfigurations for ConfigurationDescriptor<'_> {
     fn find_endpoints(&self) -> Result<Endpoints, EndpointError> {
         let mut endpoint_in: Option<Endpoint> = None;
         let mut endpoint_out: Option<Endpoint> = None;
 
         'outer: for iface in self.interface_alt_settings() {
             for endpoint in iface.endpoints() {
-                if let EndpointType::Bulk = endpoint.transfer_type() {
+                if let TransferType::Bulk = endpoint.transfer_type() {
                     match endpoint.direction() {
                         Direction::In => {
                             if endpoint_in.is_none() {
@@ -231,22 +231,20 @@ pub trait AccessoryInterface {
 
 impl AccessoryInterface for Interface {
     fn get_protocol(&mut self, timeout: Duration) -> Result<u16, AccessoryError> {
-        let size = block_on(
-            tokio::time::timeout(
-                timeout,
-                self.control_in(ControlIn {
+        let size = self
+            .control_in(
+                ControlIn {
                     control_type: ControlType::Vendor,
                     recipient: Recipient::Device,
                     request: ACCESSORY_GET_PROTOCOL,
                     value: 0,
                     index: 0,
                     length: size_of::<u16>() as u16,
-                }),
+                },
+                timeout,
             )
-            .into_inner(),
-        )
-        .into_result()
-        .map_err(nusb::Error::other)?;
+            .wait()
+            .map_err(nusb::Error::other)?;
 
         if size.len() != size_of::<u16>() {
             return Err(AccessoryError::InvalidLength(size.len()));
@@ -262,26 +260,24 @@ impl AccessoryInterface for Interface {
         timeout: Duration,
     ) -> Result<(), AccessoryError> {
         let data = str.as_bytes_with_nul();
-        let size = block_on(
-            tokio::time::timeout(
-                timeout,
-                self.control_out(ControlOut {
+        let _size = self
+            .control_out(
+                ControlOut {
                     control_type: ControlType::Vendor,
                     recipient: Recipient::Device,
                     request: ACCESSORY_SEND_STRING,
                     index,
                     value: 0,
                     data,
-                }),
+                },
+                timeout,
             )
-            .into_inner(),
-        )
-        .into_result()
-        .map_err(nusb::Error::other)?;
+            .wait()
+            .map_err(nusb::Error::other)?;
 
-        if size.actual_length() != data.len() {
+        /*if size.actual_length() != data.len() {
             return Err(AccessoryError::InvalidLength(size.actual_length()));
-        }
+        }*/
 
         Ok(())
     }
@@ -306,21 +302,18 @@ impl AccessoryInterface for Interface {
     }
 
     fn send_start(&mut self, timeout: Duration) -> Result<(), AccessoryError> {
-        block_on(
-            tokio::time::timeout(
-                timeout,
-                self.control_out(ControlOut {
-                    control_type: ControlType::Vendor,
-                    recipient: Recipient::Device,
-                    request: ACCESSORY_START,
-                    index: 0,
-                    value: 0,
-                    data: &[],
-                }),
-            )
-            .into_inner(),
+        self.control_out(
+            ControlOut {
+                control_type: ControlType::Vendor,
+                recipient: Recipient::Device,
+                request: ACCESSORY_START,
+                index: 0,
+                value: 0,
+                data: &[],
+            },
+            timeout,
         )
-        .into_result()
+        .wait()
         .map_err(nusb::Error::other)?;
 
         Ok(())
