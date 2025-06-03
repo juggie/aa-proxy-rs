@@ -1,4 +1,8 @@
-use nusb::transfer::{Queue, RequestBuffer};
+use nusb::Endpoint;
+use nusb::{
+    transfer::{Bulk, In, Out},
+    MaybeFuture,
+};
 use simplelog::*;
 use std::io;
 use std::pin::Pin;
@@ -39,11 +43,11 @@ use crate::io_uring::BUFFER_LEN;
 const MAX_PACKET_SIZE: usize = BUFFER_LEN;
 
 pub struct UsbStreamRead {
-    pub read_queue: Queue<RequestBuffer>,
+    pub read_queue: Endpoint<Bulk, In>,
     read_buffer: Vec<u8>,
 }
 pub struct UsbStreamWrite {
-    pub write_queue: Queue<Vec<u8>>,
+    pub write_queue: Endpoint<Bulk, Out>,
     write_buffer: Vec<u8>,
 }
 
@@ -58,7 +62,10 @@ pub fn switch_to_accessory(info: &nusb::DeviceInfo) -> Result<(), ConnectError> 
         info.product_id()
     );
 
-    let device = info.open().map_err(ConnectError::CantOpenUsbHandle)?;
+    let device = info
+        .open()
+        .wait()
+        .map_err(ConnectError::CantOpenUsbHandle)?;
     let _configs = device
         .active_configuration()
         .map_err(|e| ConnectError::CantOpenUsbHandle(e.into()))?;
@@ -66,6 +73,7 @@ pub fn switch_to_accessory(info: &nusb::DeviceInfo) -> Result<(), ConnectError> 
     // claim the interface
     let mut iface = device
         .detach_and_claim_interface(0)
+        .wait()
         .map_err(ConnectError::CantOpenUsbHandle)?;
 
     let strings = AccessoryStrings::new("Android", "Android Auto", "Android Auto", "1.0", "", "")
@@ -92,6 +100,7 @@ pub fn switch_to_accessory(info: &nusb::DeviceInfo) -> Result<(), ConnectError> 
 pub async fn new() -> Result<(UsbStreamRead, UsbStreamWrite), ConnectError> {
     // switch all usb devices to accessory mode and ignore errors
     nusb::list_devices()
+        .wait()
         .map_err(ConnectError::NoUsbDevice)?
         .for_each(|info| {
             switch_to_accessory(&info).unwrap_or_default();
@@ -102,6 +111,7 @@ pub async fn new() -> Result<(UsbStreamRead, UsbStreamWrite), ConnectError> {
 
     let (info, iface, endpoints) = {
         let info = nusb::list_devices()
+            .wait()
             .map_err(ConnectError::NoUsbDevice)?
             .find(|d| d.in_accessory_mode())
             .ok_or(nusb::Error::other(
@@ -109,13 +119,17 @@ pub async fn new() -> Result<(UsbStreamRead, UsbStreamWrite), ConnectError> {
             ))
             .map_err(ConnectError::NoUsbDevice)?;
 
-        let device = info.open().map_err(ConnectError::CantOpenUsbHandle)?;
+        let device = info
+            .open()
+            .wait()
+            .map_err(ConnectError::CantOpenUsbHandle)?;
         let configs = device
             .active_configuration()
             .map_err(|e| ConnectError::CantOpenUsbHandle(e.into()))?;
 
         let iface = device
             .detach_and_claim_interface(0)
+            .wait()
             .map_err(ConnectError::CantOpenUsbHandle)?;
 
         // find endpoints
@@ -136,8 +150,8 @@ pub async fn new() -> Result<(UsbStreamRead, UsbStreamWrite), ConnectError> {
         write_endpoint.address
     );
 
-    let read_queue = iface.bulk_in_queue(read_endpoint.address);
-    let write_queue = iface.bulk_out_queue(write_endpoint.address);
+    let read_queue = iface.endpoint::<Bulk, In>(read_endpoint.address).unwrap();
+    let write_queue = iface.endpoint::<Bulk, Out>(write_endpoint.address).unwrap();
 
     Ok((
         UsbStreamRead::new(read_queue),
@@ -146,7 +160,7 @@ pub async fn new() -> Result<(UsbStreamRead, UsbStreamWrite), ConnectError> {
 }
 
 impl UsbStreamRead {
-    pub fn new(read_queue: Queue<RequestBuffer>) -> Self {
+    pub fn new(read_queue: Endpoint<Bulk, In>) -> Self {
         UsbStreamRead {
             read_queue,
             read_buffer: Vec::with_capacity(MAX_PACKET_SIZE),
@@ -155,7 +169,7 @@ impl UsbStreamRead {
 }
 
 impl UsbStreamWrite {
-    pub fn new(write_queue: Queue<Vec<u8>>) -> Self {
+    pub fn new(write_queue: Endpoint<Bulk, Out>) -> Self {
         UsbStreamWrite {
             write_queue,
             write_buffer: Vec::with_capacity(MAX_PACKET_SIZE),
@@ -175,34 +189,30 @@ impl AsyncRead for UsbStreamRead {
         if pin.read_buffer.is_empty() {
             // make sure there's pending request
             if pin.read_queue.pending() == 0 {
-                pin.read_queue.submit(RequestBuffer::new(MAX_PACKET_SIZE));
+                let buffer = pin.read_queue.allocate(MAX_PACKET_SIZE);
+                pin.read_queue.submit(buffer);
             }
 
             // try to read from the remote
-            let res = ready!(pin.read_queue.poll_next(cx));
+            let res = ready!(pin.read_queue.poll_next_complete(cx));
 
             // copy into the buffer
-            match res.status {
-                Ok(_) => {
-                    // copy into poll buffer
-                    let copy_from_buffer = {
-                        let unfilled = buf.initialize_unfilled();
-                        let copy_from_buffer = std::cmp::min(unfilled.len(), res.data.len());
-                        unfilled[..copy_from_buffer].copy_from_slice(&res.data[..copy_from_buffer]);
+            // copy into poll buffer
+            let copy_from_buffer = {
+                let unfilled = buf.initialize_unfilled();
+                let copy_from_buffer = std::cmp::min(unfilled.len(), res.buffer.len());
+                unfilled[..copy_from_buffer].copy_from_slice(&res.buffer[..copy_from_buffer]);
 
-                        copy_from_buffer
-                    };
-                    buf.advance(copy_from_buffer);
-                    // copy the rest into local buffer
-                    pin.read_buffer
-                        .extend_from_slice(&res.data[copy_from_buffer..]);
-                    // submit new request
-                    pin.read_queue
-                        .submit(RequestBuffer::reuse(res.data, MAX_PACKET_SIZE));
-                    Poll::Ready(Ok(()))
-                }
-                Err(e) => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e))),
-            }
+                copy_from_buffer
+            };
+            buf.advance(copy_from_buffer);
+            // copy the rest into local buffer
+            pin.read_buffer
+                .extend_from_slice(&res.buffer[copy_from_buffer..]);
+            // submit new request
+            let buffer = pin.read_queue.allocate(MAX_PACKET_SIZE);
+            pin.read_queue.submit(buffer);
+            Poll::Ready(Ok(()))
         } else {
             let copy_from_buffer = {
                 let unfilled = buf.initialize_unfilled();
@@ -240,13 +250,13 @@ impl AsyncWrite for UsbStreamWrite {
         let pin = self.get_mut();
 
         // extend to local buffer
-        pin.write_queue.submit(buf.to_vec());
+        pin.write_queue.submit(buf.to_vec().into());
         use futures::executor::block_on;
 
         if pin.write_queue.pending() > 0 {
             let res = block_on(pin.write_queue.next_complete());
             match res.status {
-                Ok(_) => Poll::Ready(Ok(res.data.actual_length())),
+                Ok(_) => Poll::Ready(Ok(0 /*res.data.actual_length()*/)),
                 Err(e) => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e))),
             }
         } else {
