@@ -42,6 +42,26 @@ pub enum HexdumpLevel {
     All,
 }
 
+#[derive(Debug, Clone)]
+struct UsbId {
+    vid: u16,
+    pid: u16,
+}
+
+impl std::str::FromStr for UsbId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return Err("Expected format VID:PID".to_string());
+        }
+        let vid = u16::from_str_radix(parts[0], 16).map_err(|e| e.to_string())?;
+        let pid = u16::from_str_radix(parts[1], 16).map_err(|e| e.to_string())?;
+        Ok(UsbId { vid, pid })
+    }
+}
+
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
 #[clap(version, long_about = None, about = format!(
@@ -132,9 +152,9 @@ struct Args {
     #[clap(long, requires("mitm"))]
     developer_mode: bool,
 
-    /// Enable wired USB connection with phone
-    #[clap(short, long)]
-    wired: bool,
+    /// Enable wired USB connection with phone (optional VID:PID can be specified, zero is wildcard)
+    #[clap(short, long, value_parser, num_args(..=1), default_missing_value("0000:0000"))]
+    wired: Option<UsbId>,
 
     /// Use a Google Android Auto Desktop Head Unit emulator
     /// instead of real HU device (will listen on TCP 5277 port)
@@ -241,7 +261,7 @@ async fn tokio_main(args: Args, need_restart: Arc<Notify>, tcp_start: Arc<Notify
     let accessory_started_cloned = accessory_started.clone();
 
     let wifi_conf = {
-        if !args.wired {
+        if !args.wired.is_some() {
             Some(init_wifi_config(&args.iface, args.hostapd_conf))
         } else {
             None
@@ -331,6 +351,12 @@ fn main() {
         env!("GIT_DATE"),
         env!("GIT_HASH")
     );
+    if let Some(ref wired) = args.wired {
+        info!(
+            "{} 🔌 enabled wired USB connection with {:04X?}",
+            NAME, wired
+        );
+    }
     info!(
         "{} 📜 Log file path: <b><green>{}</>",
         NAME,
@@ -358,7 +384,7 @@ fn main() {
     let remove_tap_restriction = args.remove_tap_restriction;
     let video_in_motion = args.video_in_motion;
     let hex_requested = args.hexdump_level;
-    let wired = args.wired;
+    let wired = args.wired.clone();
     let dhu = args.dhu;
 
     // build and spawn main tokio runtime

@@ -16,6 +16,7 @@ use crate::aoa::{
     AccessoryConfigurations, AccessoryDeviceInfo, AccessoryError, AccessoryInterface,
     AccessoryStrings, EndpointError,
 };
+use crate::UsbId;
 
 #[derive(Debug, Error)]
 pub enum ConnectError {
@@ -97,11 +98,26 @@ pub fn switch_to_accessory(info: &nusb::DeviceInfo) -> Result<(), ConnectError> 
     Ok(())
 }
 
-pub async fn new() -> Result<(UsbStreamRead, UsbStreamWrite), ConnectError> {
+pub async fn new(wired: Option<UsbId>) -> Result<(UsbStreamRead, UsbStreamWrite), ConnectError> {
     // switch all usb devices to accessory mode and ignore errors
     nusb::list_devices()
         .wait()
         .map_err(ConnectError::NoUsbDevice)?
+        .filter(|info| {
+            if let Some(id) = &wired {
+                if id.vid > 0 && id.pid > 0 {
+                    info.vendor_id() == id.vid && info.product_id() == id.pid
+                } else if id.pid > 0 && id.vid == 0 {
+                    info.product_id() == id.pid
+                } else if id.vid > 0 && id.pid == 0 {
+                    info.vendor_id() == id.vid
+                } else {
+                    true
+                }
+            } else {
+                true
+            }
+        })
         .for_each(|info| {
             switch_to_accessory(&info).unwrap_or_default();
         });

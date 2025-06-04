@@ -38,6 +38,7 @@ use crate::mitm::ProxyType;
 use crate::usb_stream;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 use crate::HexdumpLevel;
+use crate::UsbId;
 use crate::{TCP_DHU_PORT, TCP_SERVER_PORT};
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
@@ -201,13 +202,13 @@ pub async fn io_loop(
     remove_tap_restriction: bool,
     video_in_motion: bool,
     hex_requested: HexdumpLevel,
-    wired: bool,
+    wired: Option<UsbId>,
     dhu: bool,
 ) -> Result<()> {
     // prepare/bind needed TCP listeners
     let mut dhu_listener = None;
     let mut md_listener = None;
-    if !wired {
+    if !wired.is_some() {
         info!("{} 🛰️ Starting TCP server for MD...", NAME);
         let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
         md_listener = Some(TcpListener::bind(bind_addr).unwrap());
@@ -225,12 +226,12 @@ pub async fn io_loop(
         let mut md_usb = None;
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        if wired {
+        if wired.is_some() {
             info!(
                 "{} 💤 trying to enable Android Auto mode on USB port...",
                 NAME
             );
-            match usb_stream::new().await {
+            match usb_stream::new(wired.clone()).await {
                 Err(e) => {
                     error!("{} 🔴 Enabling Android Auto: {}", NAME, e);
                     // notify main loop to restart
