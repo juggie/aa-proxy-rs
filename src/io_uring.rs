@@ -316,10 +316,12 @@ pub async fn io_loop(
         let md_r;
         let hu_w;
         let md_w;
+        let mut usb_dev = None;
         // MD transfer device
         if let Some(md) = md_usb {
             // MD over wired USB
-            let (usb_r, usb_w) = md;
+            let (dev, usb_r, usb_w) = md;
+            usb_dev = Some(dev);
             let usb_r = Rc::new(RefCell::new(usb_r));
             let usb_w = Rc::new(RefCell::new(usb_w));
             md_r = IoDevice::UsbReader(usb_r, PhantomData::<TcpStream>);
@@ -398,6 +400,10 @@ pub async fn io_loop(
         );
         if let Err(e) = res {
             error!("{} 🔴 Connection error: {}", NAME, e);
+            if let Some(dev) = usb_dev {
+                info!("{} 🔌 Resetting USB device for next try...", NAME);
+                let _ = dev.reset().await;
+            }
         }
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`

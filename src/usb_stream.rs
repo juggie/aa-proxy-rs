@@ -1,7 +1,7 @@
 use nusb::Endpoint;
 use nusb::{
     transfer::{Bulk, In, Out},
-    MaybeFuture,
+    Device, MaybeFuture,
 };
 use simplelog::*;
 use std::io;
@@ -98,7 +98,9 @@ pub fn switch_to_accessory(info: &nusb::DeviceInfo) -> Result<(), ConnectError> 
     Ok(())
 }
 
-pub async fn new(wired: Option<UsbId>) -> Result<(UsbStreamRead, UsbStreamWrite), ConnectError> {
+pub async fn new(
+    wired: Option<UsbId>,
+) -> Result<(Device, UsbStreamRead, UsbStreamWrite), ConnectError> {
     // switch all usb devices to accessory mode and ignore errors
     nusb::list_devices()
         .wait()
@@ -125,7 +127,7 @@ pub async fn new(wired: Option<UsbId>) -> Result<(UsbStreamRead, UsbStreamWrite)
     // wait for the app to open and connect
     sleep(Duration::from_secs(1)).await;
 
-    let (info, iface, endpoints) = {
+    let (device, info, iface, endpoints) = {
         let info = nusb::list_devices()
             .wait()
             .map_err(ConnectError::NoUsbDevice)?
@@ -153,7 +155,7 @@ pub async fn new(wired: Option<UsbId>) -> Result<(UsbStreamRead, UsbStreamWrite)
             .find_endpoints()
             .map_err(ConnectError::CantOpenUsbAccessoryEndpoint)?;
 
-        (info, iface, endpoints)
+        (device, info, iface, endpoints)
     };
 
     let read_endpoint = endpoints.endpoint_in();
@@ -170,6 +172,7 @@ pub async fn new(wired: Option<UsbId>) -> Result<(UsbStreamRead, UsbStreamWrite)
     let write_queue = iface.endpoint::<Bulk, Out>(write_endpoint.address).unwrap();
 
     Ok((
+        device,
         UsbStreamRead::new(read_queue),
         UsbStreamWrite::new(write_queue),
     ))
