@@ -53,7 +53,7 @@ pub struct BluetoothState {
     adapter: Adapter,
     handle_ble: Option<AdvertisementHandle>,
     handle_aa: ProfileHandle,
-    handle_hsp: JoinHandle<Result<ProfileHandle>>,
+    handle_hsp: Option<JoinHandle<Result<ProfileHandle>>>,
     handle_agent: AgentHandle,
     keepalive: bool,
 }
@@ -140,8 +140,19 @@ async fn power_up_and_wait_for_connection(
         require_authorization: Some(false),
         ..Default::default()
     };
-    let mut handle_hsp = session.register_profile(profile).await?;
-    info!("{} 🎧 Headset Profile (HSP): registered", NAME);
+    let handle_hsp = match session.register_profile(profile).await {
+        Ok(handle_hsp) => {
+            info!("{} 🎧 Headset Profile (HSP): registered", NAME);
+            Some(handle_hsp)
+        }
+        Err(e) => {
+            warn!(
+                "{} 🎧 Headset Profile (HSP) registering error: {}, ignoring",
+                NAME, e
+            );
+            None
+        }
+    };
 
     info!("{} ⏳ Waiting for phone to connect via bluetooth...", NAME);
 
@@ -190,20 +201,26 @@ async fn power_up_and_wait_for_connection(
     };
 
     // handling connection to headset profile in own task
-    let task_hsp: JoinHandle<Result<ProfileHandle>> = tokio::spawn(async move {
-        let req = handle_hsp
-            .next()
-            .await
-            .expect("received no connect request");
-        info!(
-            "{} 🎧 Headset Profile (HSP): connect from: <b>{}</>",
-            NAME,
-            req.device()
-        );
-        req.accept()?;
+    let task_hsp = {
+        if let Some(mut handle_hsp) = handle_hsp {
+            Some(tokio::spawn(async move {
+                let req = handle_hsp
+                    .next()
+                    .await
+                    .expect("received no connect request");
+                info!(
+                    "{} 🎧 Headset Profile (HSP): connect from: <b>{}</>",
+                    NAME,
+                    req.device()
+                );
+                req.accept()?;
 
-        Ok(handle_hsp)
-    });
+                Ok(handle_hsp)
+            }))
+        } else {
+            None
+        }
+    };
 
     let req = timeout(Duration::from_secs(10), handle_aa.next())
         .await?
@@ -320,19 +337,20 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
     drop(state.handle_aa);
 
     // HSP profile is/was running in own task
-    let retval = state.handle_hsp;
-    match timeout(Duration::from_secs_f32(2.5), retval).await {
-        Ok(task_handle) => match task_handle? {
-            Ok(handle_hsp) => {
-                info!("{} 🎧 Removing HSP profile", NAME);
-                drop(handle_hsp);
-            }
+    if let Some(handle) = state.handle_hsp {
+        match timeout(Duration::from_secs_f32(2.5), handle).await {
+            Ok(task_handle) => match task_handle? {
+                Ok(handle_hsp) => {
+                    info!("{} 🎧 Removing HSP profile", NAME);
+                    drop(handle_hsp);
+                }
+                Err(e) => {
+                    warn!("{} 🎧 HSP profile error: {}", NAME, e);
+                }
+            },
             Err(e) => {
-                warn!("{} 🎧 HSP profile error: {}", NAME, e);
+                warn!("{} 🎧 Error waiting for HSP profile task: {}", NAME, e);
             }
-        },
-        Err(e) => {
-            warn!("{} 🎧 Error waiting for HSP profile task: {}", NAME, e);
         }
     }
 
