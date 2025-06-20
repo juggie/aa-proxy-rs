@@ -145,6 +145,7 @@ Options:
   -a, --advertise                      BLE advertising
   -d, --debug                          Enable debug info
       --hexdump-level <HEXDUMP_LEVEL>  Hex dump level [default: disabled] [possible values: disabled, decrypted-input, raw-input, decrypted-output, raw-output, all]
+      --disable-console-debug          Disable debug level on console, save it only to logfile (helpful for `hexdump-level` option)
   -l, --legacy                         Enable legacy mode
   -c, --connect [<CONNECT>]            Auto-connect to saved phone or specified phone MAC address if provided
       --logfile <LOGFILE>              Log file path [default: /var/log/aa-proxy-rs.log]

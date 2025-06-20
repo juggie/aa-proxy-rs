@@ -83,6 +83,10 @@ struct Args {
     #[clap(long, default_value_t, value_enum, requires("debug"))]
     hexdump_level: HexdumpLevel,
 
+    /// Disable debug level on console, save it only to logfile (helpful for `hexdump-level` option)
+    #[clap(long, requires("debug"))]
+    disable_console_debug: bool,
+
     /// Enable legacy mode
     #[clap(short, long)]
     legacy: bool,
@@ -213,7 +217,7 @@ fn init_wifi_config(iface: &str, hostapd_conf: PathBuf) -> WifiConfig {
     }
 }
 
-fn logging_init(debug: bool, log_path: &PathBuf) {
+fn logging_init(debug: bool, disable_console_debug: bool, log_path: &PathBuf) {
     let conf = ConfigBuilder::new()
         .set_time_format("%F, %H:%M:%S%.3f".to_string())
         .set_write_log_enable_colors(true)
@@ -228,7 +232,13 @@ fn logging_init(debug: bool, log_path: &PathBuf) {
     };
 
     let console_logger: Box<dyn SharedLogger> = TermLogger::new(
-        requested_level,
+        {
+            if disable_console_debug {
+                LevelFilter::Info
+            } else {
+                requested_level
+            }
+        },
         conf.clone(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
@@ -334,7 +344,7 @@ async fn tokio_main(args: Args, need_restart: Arc<Notify>, tcp_start: Arc<Notify
 fn main() {
     let started = Instant::now();
     let args = Args::parse();
-    logging_init(args.debug, &args.logfile);
+    logging_init(args.debug, args.disable_console_debug, &args.logfile);
 
     let stats_interval = {
         if args.stats_interval == 0 {
