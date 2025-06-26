@@ -266,6 +266,11 @@ pub async fn pkt_modify_hook(
     video_in_motion: bool,
     ctx: &mut ModifyContext,
 ) -> Result<()> {
+    // if for some reason we have too small packet, bail out
+    if pkt.payload.len() < 2 {
+        return Ok(());
+    }
+
     // message_id is the first 2 bytes of payload
     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
     let data = &pkt.payload[2..]; // start of message data
