@@ -17,6 +17,8 @@ for filename in *img; do
 	mount -o loop,offset=33554944 $filename /mnt
 	rm /mnt/etc/init.d/S93aawgd
 	cp /root/S93aa-proxy-rs /mnt/etc/init.d
+	mkdir /mnt/etc/aa-proxy-rs
+	cp /root/config.toml /mnt/etc/aa-proxy-rs
 
 	# pi zero w has different binary
 	if [ $filename = "raspberrypi0w-sdcard.img" ]; then

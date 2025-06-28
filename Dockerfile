@@ -20,6 +20,7 @@ COPY --from=stage-rust /usr/src/app/target/arm-unknown-linux-gnueabihf/release/a
 COPY --from=stage-rust /usr/src/app/pi0w/arm-unknown-linux-gnueabihf/release/aa-proxy-rs ./aa-proxy-rs-0w
 ADD contrib/injector.sh .
 ADD contrib/S93aa-proxy-rs .
+ADD contrib/config.toml .
 RUN --security=insecure ./injector.sh
 
 # copy the resulting binary out of container to local dir
