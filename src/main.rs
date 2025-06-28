@@ -16,8 +16,12 @@ use simplelog::*;
 use usb_gadget::uevent_listener;
 use usb_gadget::UsbGadgetState;
 
+use serde::de::{self, Deserializer, Visitor};
+use serde::Deserialize;
+use std::fmt;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Builder;
@@ -31,7 +35,7 @@ const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
 const TCP_SERVER_PORT: i32 = 5288;
 const TCP_DHU_PORT: i32 = 5277;
 
-#[derive(clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy)]
+#[derive(clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy, Deserialize)]
 pub enum HexdumpLevel {
     #[default]
     Disabled,
@@ -62,6 +66,32 @@ impl std::str::FromStr for UsbId {
     }
 }
 
+impl<'de> Deserialize<'de> for UsbId {
+    fn deserialize<D>(deserializer: D) -> Result<UsbId, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct UsbIdVisitor;
+
+        impl<'de> Visitor<'de> for UsbIdVisitor {
+            type Value = UsbId;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string in the format VID:PID")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<UsbId, E>
+            where
+                E: de::Error,
+            {
+                UsbId::from_str(value).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(UsbIdVisitor)
+    }
+}
+
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
 #[clap(version, long_about = None, about = format!(
@@ -71,99 +101,82 @@ impl std::str::FromStr for UsbId {
     env!("GIT_HASH")
 ))]
 struct Args {
-    /// BLE advertising
-    #[clap(short, long)]
+    /// Config file path
+    #[clap(
+        short,
+        long,
+        value_parser,
+        default_value = "/etc/aa-proxy-rs/config.toml"
+    )]
+    config: PathBuf,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct AppConfig {
     advertise: bool,
-
-    /// Enable debug info
-    #[clap(short, long)]
     debug: bool,
-
-    /// Hex dump level
-    #[clap(long, default_value_t, value_enum, requires("debug"))]
     hexdump_level: HexdumpLevel,
-
-    /// Disable debug level on console, save it only to logfile (helpful for `hexdump-level` option)
-    #[clap(long, requires("debug"))]
     disable_console_debug: bool,
-
-    /// Enable legacy mode
-    #[clap(short, long)]
     legacy: bool,
-
-    /// Auto-connect to saved phone or specified phone MAC address if provided
-    #[clap(short, long, num_args(..=1), default_missing_value("00:00:00:00:00:00"))]
     connect: Option<Address>,
-
-    /// Log file path
-    #[clap(long, value_parser, default_value = "/var/log/aa-proxy-rs.log")]
     logfile: PathBuf,
-
-    /// Interval of showing data transfer statistics (0 = disabled)
-    #[clap(short, long, value_name = "SECONDS", default_value_t = 0)]
     stats_interval: u16,
-
-    /// UDC Controller name
-    #[clap(short, long)]
     udc: Option<String>,
-
-    /// WLAN / Wi-Fi Hotspot interface
-    #[clap(short, long, default_value = "wlan0")]
     iface: String,
-
-    /// hostapd.conf file location
-    #[clap(long, value_parser, default_value = "/var/run/hostapd.conf")]
     hostapd_conf: PathBuf,
-
-    /// BLE device name
-    #[clap(short, long)]
     btalias: Option<String>,
-
-    /// Keep alive mode: BLE adapter doesn't turn off after successful connection,
-    /// so that the phone can remain connected (used in special configurations)
-    #[clap(short, long)]
     keepalive: bool,
-
-    /// Data transfer timeout
-    #[clap(short, long, value_name = "SECONDS", default_value_t = 10)]
     timeout_secs: u16,
-
-    /// Enable MITM mode (experimental)
-    #[clap(short, long)]
     mitm: bool,
-
-    /// MITM: Force DPI (experimental)
-    #[clap(long, requires("mitm"))]
     dpi: Option<u16>,
-
-    /// MITM: remove tap restriction
-    #[clap(long, requires("mitm"))]
     remove_tap_restriction: bool,
-
-    /// MITM: video in motion
-    #[clap(long, requires("mitm"))]
     video_in_motion: bool,
-
-    /// MITM: Disable media sink
-    #[clap(long, requires("mitm"))]
     disable_media_sink: bool,
-
-    /// MITM: Disable TTS sink
-    #[clap(long, requires("mitm"))]
     disable_tts_sink: bool,
-
-    /// MITM: Developer mode
-    #[clap(long, requires("mitm"))]
     developer_mode: bool,
-
-    /// Enable wired USB connection with phone (optional VID:PID can be specified, zero is wildcard)
-    #[clap(short, long, value_parser, num_args(..=1), default_missing_value("0000:0000"))]
     wired: Option<UsbId>,
-
-    /// Use a Google Android Auto Desktop Head Unit emulator
-    /// instead of real HU device (will listen on TCP 5277 port)
-    #[clap(long)]
     dhu: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            advertise: false,
+            debug: false,
+            hexdump_level: HexdumpLevel::Disabled,
+            disable_console_debug: false,
+            legacy: false,
+            connect: None,
+            logfile: "/var/log/aa-proxy-rs.log".into(),
+            stats_interval: 0,
+            udc: None,
+            iface: "wlan0".to_string(),
+            hostapd_conf: "/var/run/hostapd.conf".into(),
+            btalias: None,
+            keepalive: false,
+            timeout_secs: 10,
+            mitm: false,
+            dpi: None,
+            remove_tap_restriction: false,
+            video_in_motion: false,
+            disable_media_sink: false,
+            disable_tts_sink: false,
+            developer_mode: false,
+            wired: None,
+            dhu: false,
+        }
+    }
+}
+
+fn load_config(config_file: PathBuf) -> Result<AppConfig, Box<dyn std::error::Error>> {
+    let file_config: AppConfig = config::Config::builder()
+        .add_source(config::File::from(config_file).required(false))
+        .build()?
+        .try_deserialize()
+        .unwrap_or_default();
+
+    Ok(file_config)
 }
 
 #[derive(Clone)]
@@ -266,24 +279,24 @@ fn logging_init(debug: bool, disable_console_debug: bool, log_path: &PathBuf) {
     }
 }
 
-async fn tokio_main(args: Args, need_restart: Arc<Notify>, tcp_start: Arc<Notify>) {
+async fn tokio_main(config: AppConfig, need_restart: Arc<Notify>, tcp_start: Arc<Notify>) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
     let wifi_conf = {
-        if !args.wired.is_some() {
-            Some(init_wifi_config(&args.iface, args.hostapd_conf))
+        if !config.wired.is_some() {
+            Some(init_wifi_config(&config.iface, config.hostapd_conf))
         } else {
             None
         }
     };
     let mut usb = None;
-    if !args.dhu {
-        if args.legacy {
+    if !config.dhu {
+        if config.legacy {
             // start uevent listener in own task
             std::thread::spawn(|| uevent_listener(accessory_started_cloned));
         }
-        usb = Some(UsbGadgetState::new(args.legacy, args.udc));
+        usb = Some(UsbGadgetState::new(config.legacy, config.udc));
     }
     loop {
         if let Some(ref mut usb) = usb {
@@ -296,12 +309,12 @@ async fn tokio_main(args: Args, need_restart: Arc<Notify>, tcp_start: Arc<Notify
         if let Some(ref wifi_conf) = wifi_conf {
             loop {
                 match bluetooth_setup_connection(
-                    args.advertise,
-                    args.btalias.clone(),
-                    args.connect,
+                    config.advertise,
+                    config.btalias.clone(),
+                    config.connect,
                     wifi_conf.clone(),
                     tcp_start.clone(),
-                    args.keepalive,
+                    config.keepalive,
                 )
                 .await
                 {
@@ -343,25 +356,47 @@ async fn tokio_main(args: Args, need_restart: Arc<Notify>, tcp_start: Arc<Notify
 
 fn main() {
     let started = Instant::now();
+
+    // CLI arguments
     let args = Args::parse();
-    logging_init(args.debug, args.disable_console_debug, &args.logfile);
 
-    let stats_interval = {
-        if args.stats_interval == 0 {
-            None
-        } else {
-            Some(Duration::from_secs(args.stats_interval.into()))
-        }
-    };
-    let read_timeout = Duration::from_secs(args.timeout_secs.into());
+    // parse config
+    let config = load_config(args.config.clone()).unwrap();
 
+    logging_init(config.debug, config.disable_console_debug, &config.logfile);
     info!(
         "🛸 <b><blue>aa-proxy-rs</> is starting, build: {}, git: {}-{}",
         env!("BUILD_DATE"),
         env!("GIT_DATE"),
         env!("GIT_HASH")
     );
-    if let Some(ref wired) = args.wired {
+
+    // check and display config
+    if args.config.exists() {
+        info!(
+            "{} ⚙️ config loaded from file: {}",
+            NAME,
+            args.config.display()
+        );
+    } else {
+        warn!(
+            "{} ⚙️ config file: {} doesn't exist, defaults used",
+            NAME,
+            args.config.display()
+        );
+    }
+    debug!("{} ⚙️ startup configuration: {:#?}", NAME, config);
+
+    let stats_interval = {
+        if config.stats_interval == 0 {
+            None
+        } else {
+            Some(Duration::from_secs(config.stats_interval.into()))
+        }
+    };
+    let read_timeout = Duration::from_secs(config.timeout_secs.into());
+
+    if let Some(ref wired) = config.wired {
         info!(
             "{} 🔌 enabled wired USB connection with {:04X?}",
             NAME, wired
@@ -370,7 +405,7 @@ fn main() {
     info!(
         "{} 📜 Log file path: <b><green>{}</>",
         NAME,
-        args.logfile.display()
+        config.logfile.display()
     );
     info!(
         "{} ⚙️ Showing transfer statistics: <b><blue>{}</>",
@@ -386,20 +421,20 @@ fn main() {
     let need_restart_cloned = need_restart.clone();
     let tcp_start = Arc::new(Notify::new());
     let tcp_start_cloned = tcp_start.clone();
-    let mitm = args.mitm;
-    let dpi = args.dpi;
-    let developer_mode = args.developer_mode;
-    let disable_media_sink = args.disable_media_sink;
-    let disable_tts_sink = args.disable_tts_sink;
-    let remove_tap_restriction = args.remove_tap_restriction;
-    let video_in_motion = args.video_in_motion;
-    let hex_requested = args.hexdump_level;
-    let wired = args.wired.clone();
-    let dhu = args.dhu;
+    let mitm = config.mitm;
+    let dpi = config.dpi;
+    let developer_mode = config.developer_mode;
+    let disable_media_sink = config.disable_media_sink;
+    let disable_tts_sink = config.disable_tts_sink;
+    let remove_tap_restriction = config.remove_tap_restriction;
+    let video_in_motion = config.video_in_motion;
+    let hex_requested = config.hexdump_level;
+    let wired = config.wired.clone();
+    let dhu = config.dhu;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    runtime.spawn(async move { tokio_main(args, need_restart, tcp_start).await });
+    runtime.spawn(async move { tokio_main(config, need_restart, tcp_start).await });
 
     // start tokio_uring runtime simultaneously
     let _ = tokio_uring::start(io_loop(
