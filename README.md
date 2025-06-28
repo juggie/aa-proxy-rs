@@ -24,7 +24,8 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
 
 ## Current project status
 Now after a lot of stress-testing and coding I think the project has matured enough, that I can say that the main stability goal was reached.
-I am using this project almost daily in my car and trying to get rid of all issues I may encounter.
+I am using this project almost daily in my car and trying to get rid of all issues I may encounter.<br>
+There is also great and helpful community on Discord around this project. If you want to join or ask for help/support then feel free to connect to our server: [aa-proxy-rs](https://discord.gg/c7JKdwHyZu).
 
 ## SD card images
 I am using Nisarg's RaspberryPi images from [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project and replacing `aawgd` with `aa-proxy-rs`.<br>
@@ -142,46 +143,28 @@ Startup parameters (see below) are defined [here](https://github.com/manio/aa-pr
 Usage: aa-proxy-rs [OPTIONS]
 
 Options:
-  -a, --advertise                      BLE advertising
-  -d, --debug                          Enable debug info
-      --hexdump-level <HEXDUMP_LEVEL>  Hex dump level [default: disabled] [possible values: disabled, decrypted-input, raw-input, decrypted-output, raw-output, all]
-      --disable-console-debug          Disable debug level on console, save it only to logfile (helpful for `hexdump-level` option)
-  -l, --legacy                         Enable legacy mode
-  -c, --connect [<CONNECT>]            Auto-connect to saved phone or specified phone MAC address if provided
-      --logfile <LOGFILE>              Log file path [default: /var/log/aa-proxy-rs.log]
-  -s, --stats-interval <SECONDS>       Interval of showing data transfer statistics (0 = disabled) [default: 0]
-  -u, --udc <UDC>                      UDC Controller name
-  -i, --iface <IFACE>                  WLAN / Wi-Fi Hotspot interface [default: wlan0]
-      --hostapd-conf <HOSTAPD_CONF>    hostapd.conf file location [default: /var/run/hostapd.conf]
-  -b, --btalias <BTALIAS>              BLE device name
-  -k, --keepalive                      Keep alive mode: BLE adapter doesn't turn off after successful connection, so that the phone can remain connected (used in special configurations)
-  -t, --timeout-secs <SECONDS>         Data transfer timeout [default: 10]
-  -m, --mitm                           Enable MITM mode (experimental)
-      --dpi <DPI>                      MITM: Force DPI (experimental)
-      --remove-tap-restriction         MITM: remove tap restriction
-      --video-in-motion                MITM: video in motion
-      --disable-media-sink             MITM: Disable media sink
-      --disable-tts-sink               MITM: Disable TTS sink
-      --developer-mode                 MITM: Developer mode
-  -w, --wired [<WIRED>]                Enable wired USB connection with phone (optional VID:PID can be specified, zero is wildcard)
-      --dhu                            Use a Google Android Auto Desktop Head Unit emulator instead of real HU device (will listen on TCP 5277 port)
-  -h, --help                           Print help
-  -V, --version                        Print version
+  -c, --config <CONFIG>  Config file path [default: /etc/aa-proxy-rs/config.toml]
+  -h, --help             Print help
+  -V, --version          Print version
 ```
-Most options are self explanatory, but these needs some more attention:<br>
-- `-l, --legacy`<br>
+
+## Configuration
+Default startup config file is [config.toml](https://github.com/manio/aa-proxy-rs/blob/main/contrib/config.toml).
+
+Configuration options are documented in comments, but these needs some more attention:<br>
+- `legacy`<br>
 Original `aawgd` is using two USB gadgets: **default** and **accessory**. When connecting to car headunit, it switches first to **default** then to **accessory**.
 During my development I found out that my car headunit doesn't need this switching. It is working fine connecting directly to **accessory** gadget.
 Moreover with this approach it is much faster and doesn't need to wait for USB events in dedicated _UEvent_ thread. As the result I decided to leave the old (legacy)
 code under this switch for compatibility with some headunits.<br>
 In short: if you have problems with USB connection try to enable the legacy mode.
 
-- `-c, --connect <CONNECT>`<br>
-By default without this switch the aa-proxy-rs is starting but it is only visible as a bluetooth dongle, to which you have to connect manually from your phone to
+- `connect`<br>
+By default without this option the aa-proxy-rs is starting but it is only visible as a bluetooth dongle, to which you have to connect manually from your phone to
 initiate AndroidAuto connection. If I am correct this was called `dongle mode` in `aawgd`.<br>
-If you provide `-c` switch without any additional address, then the daemon is trying to connect to known (paired?) bluetooth devices (phones) in a loop
+If you provide `connect` option with default `00:00:00:00:00:00` wildcard address, then the daemon is trying to connect to known (paired?) bluetooth devices (phones) in a loop
 (the **bluetoothd** have a cached list of recently connected devices in /var/lib/bluetooth). This is the default mode for `aawgd` for the time I am writing this.<br>
-If you provide `-c MAC_ADDRESS` where MAC_ADDRESS is the MAC of your phone (bluetooth), then the aa-proxy-rs will try to connect only to this specified device
+If you set this option to specific `MAC_ADDRESS` where MAC_ADDRESS is the MAC of your phone (bluetooth), then the aa-proxy-rs will try to connect only to this specified device
 in a loop (ignoring all **bluetoothd** cached devices).
 
 ## MITM mode
@@ -189,7 +172,7 @@ Man-in-the-middle mode support has been added recently. This is the mode which a
 Separate encrypted connections are made to each device to be able to see or modify the data passed between HU and MD.<br>
 This is opening new possibilities like, e.g., forcing HU to specific DPI, adding EV capabilities to HU/cars which doesn't support this Google Maps feature.<br>
 All the above is not currently supported but should be possible and easier with this mode now implemented.<br>
-To have this mode working you need to pass `-m, --mitm` command line switch and provide certificate and private key for communication for both ends/devices.
+To have this mode working you need enable `mitm` option in configuration and provide certificate and private key for communication for both ends/devices.
 Default directory where the keys are search for is: `/etc/aa-proxy-rs/`, and the following file set needs to be there:<br>
 - hu_key.pem
 - hu_cert.pem
