@@ -73,6 +73,7 @@ async fn power_up_and_wait_for_connection(
     btalias: Option<String>,
     connect: Option<Address>,
     keepalive: bool,
+    bt_timeout: Duration,
 ) -> Result<(BluetoothState, Stream)> {
     // setting BT alias for further use
     let alias = match btalias {
@@ -222,7 +223,7 @@ async fn power_up_and_wait_for_connection(
         }
     };
 
-    let req = timeout(Duration::from_secs(10), handle_aa.next())
+    let req = timeout(bt_timeout, handle_aa.next())
         .await?
         .expect("received no connect request");
     info!(
@@ -371,6 +372,7 @@ pub async fn bluetooth_setup_connection(
     wifi_config: WifiConfig,
     tcp_start: Arc<Notify>,
     keepalive: bool,
+    bt_timeout: Duration,
 ) -> Result<BluetoothState> {
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
@@ -378,7 +380,8 @@ pub async fn bluetooth_setup_connection(
     let mut started;
 
     let (state, mut stream) =
-        power_up_and_wait_for_connection(advertise, btalias, connect, keepalive).await?;
+        power_up_and_wait_for_connection(advertise, btalias, connect, keepalive, bt_timeout)
+            .await?;
 
     info!("{} 📲 Sending parameters via bluetooth to phone...", NAME);
     let mut start_req = WifiStartRequest::new();

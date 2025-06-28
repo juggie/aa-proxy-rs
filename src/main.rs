@@ -128,6 +128,7 @@ pub struct AppConfig {
     btalias: Option<String>,
     keepalive: bool,
     timeout_secs: u16,
+    bt_timeout_secs: u16,
     mitm: bool,
     dpi: Option<u16>,
     remove_tap_restriction: bool,
@@ -156,6 +157,7 @@ impl Default for AppConfig {
             btalias: None,
             keepalive: false,
             timeout_secs: 10,
+            bt_timeout_secs: 120,
             mitm: false,
             dpi: None,
             remove_tap_restriction: false,
@@ -315,6 +317,7 @@ async fn tokio_main(config: AppConfig, need_restart: Arc<Notify>, tcp_start: Arc
                     wifi_conf.clone(),
                     tcp_start.clone(),
                     config.keepalive,
+                    Duration::from_secs(config.bt_timeout_secs.into()),
                 )
                 .await
                 {

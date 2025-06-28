@@ -45,6 +45,10 @@
   # set it to phone BT MAC address for connecting to this specific phone
   connect = "00:00:00:00:00:00"
 
+  # Bluetooth handshake timeout [seconds], this is for rare cases when the phone stops responding, to prevent
+  # the bluetooth handshake deadlock with inifite waiting and not restarting connection again
+  bt_timeout_secs = 120
+
   # WLAN / Wi-Fi Hotspot interface (for obtaining IP and BSSID)
   iface = "wlan0"
 
