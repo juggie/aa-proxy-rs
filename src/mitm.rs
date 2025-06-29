@@ -265,10 +265,10 @@ pub async fn pkt_modify_hook(
     remove_tap_restriction: bool,
     video_in_motion: bool,
     ctx: &mut ModifyContext,
-) -> Result<()> {
+) -> Result<bool> {
     // if for some reason we have too small packet, bail out
     if pkt.payload.len() < 2 {
-        return Ok(());
+        return Ok(false);
     }
 
     // message_id is the first 2 bytes of payload
@@ -295,11 +295,11 @@ pub async fn pkt_modify_hook(
             }
         }
         // end sensors processing
-        return Ok(());
+        return Ok(false);
     }
 
     if pkt.channel != 0 {
-        return Ok(());
+        return Ok(false);
     }
     // trying to obtain an Enum from message_id
     let control = protos::ControlMessageType::from_i32(message_id);
@@ -411,10 +411,10 @@ pub async fn pkt_modify_hook(
             pkt.payload.insert(0, (message_id >> 8) as u8);
             pkt.payload.insert(1, (message_id & 0xff) as u8);
         }
-        _ => return Ok(()),
+        _ => return Ok(false),
     };
 
-    Ok(())
+    Ok(false)
 }
 
 /// encapsulates SSL data into Packet
@@ -711,7 +711,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
         if let Ok(mut pkt) = rx.try_recv() {
-            pkt_modify_hook(
+            let handled = pkt_modify_hook(
                 proxy_type,
                 &mut pkt,
                 dpi,
@@ -730,13 +730,22 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 &pkt,
             )
             .await;
-            pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
-            let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
-            pkt.transmit(&mut device).await?;
 
-            // Increment byte counters for statistics
-            // fixme: compute final_len for precise stats
-            bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
+            if handled {
+                debug!(
+                    "{} pkt_modify_hook: message has been handled, sending reply packet only...",
+                    get_name(proxy_type)
+                );
+                tx.send(pkt).await?;
+            } else {
+                pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
+                let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
+                pkt.transmit(&mut device).await?;
+
+                // Increment byte counters for statistics
+                // fixme: compute final_len for precise stats
+                bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
+            }
         };
 
         // handling input data from the reader thread
