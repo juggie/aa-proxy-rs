@@ -331,7 +331,7 @@ pub async fn pkt_modify_hook(
         return Ok(false);
     }
 
-    if pkt.channel != 0 {
+    if pkt.channel != 0 || proxy_type == ProxyType::MobileDevice {
         return Ok(false);
     }
     // trying to obtain an Enum from message_id
@@ -827,6 +827,20 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
             match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
                 Ok(_) => {
+                    let _ = pkt_modify_hook(
+                        proxy_type,
+                        &mut pkt,
+                        dpi,
+                        developer_mode,
+                        disable_media_sink,
+                        disable_tts_sink,
+                        remove_tap_restriction,
+                        video_in_motion,
+                        ev,
+                        &mut ctx,
+                        rest_ctx.clone(),
+                    )
+                    .await?;
                     let _ = pkt_debug(
                         proxy_type,
                         HexdumpLevel::DecryptedInput,
