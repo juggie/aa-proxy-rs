@@ -138,6 +138,7 @@ pub struct AppConfig {
     developer_mode: bool,
     wired: Option<UsbId>,
     dhu: bool,
+    ev: bool,
 }
 
 impl Default for AppConfig {
@@ -167,6 +168,7 @@ impl Default for AppConfig {
             developer_mode: false,
             wired: None,
             dhu: false,
+            ev: false,
         }
     }
 }

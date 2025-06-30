@@ -80,3 +80,7 @@
 
   # Developer mode
   developer_mode = false
+
+### MITM/EV ROUTING CONFIGURATION
+  # Enable EV routing
+  ev = false
