@@ -17,6 +17,7 @@ use tokio_uring::buf::BoundedBuf;
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::mitm::protos::*;
+use crate::mitm::sensor_source_service::Sensor;
 use crate::mitm::AudioStreamType::*;
 use crate::mitm::SensorMessageId::*;
 use crate::mitm::SensorType::*;
@@ -106,10 +107,10 @@ impl SslMemBuf {
 }
 
 pub struct Packet {
-    channel: u8,
-    flags: u8,
-    final_length: Option<u32>,
-    payload: Vec<u8>,
+    pub channel: u8,
+    pub flags: u8,
+    pub final_length: Option<u32>,
+    pub payload: Vec<u8>,
 }
 
 impl Packet {
@@ -276,10 +277,37 @@ pub async fn pkt_modify_hook(
     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
     let data = &pkt.payload[2..]; // start of message data
 
-    // handling driving_status_data change
+    // handling data on sensor channel
     if let Some(ch) = ctx.sensor_channel {
         if ch == pkt.channel {
             match protos::SensorMessageId::from_i32(message_id).unwrap_or(SENSOR_MESSAGE_ERROR) {
+                SENSOR_MESSAGE_REQUEST => {
+                    if let Ok(msg) = SensorRequest::parse_from_bytes(data) {
+                        if msg.type_() == SensorType::SENSOR_VEHICLE_ENERGY_MODEL_DATA {
+                            debug!(
+                                "additional SENSOR_MESSAGE_REQUEST for {:?}, making a response with success...",
+                                msg.type_()
+                            );
+                            let mut response = SensorResponse::new();
+                            response.set_status(MessageStatus::STATUS_SUCCESS);
+
+                            let mut payload: Vec<u8> = response.write_to_bytes()?;
+                            payload.insert(0, ((SENSOR_MESSAGE_RESPONSE as u16) >> 8) as u8);
+                            payload.insert(1, ((SENSOR_MESSAGE_RESPONSE as u16) & 0xff) as u8);
+
+                            let reply = Packet {
+                                channel: ch,
+                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload,
+                            };
+                            *pkt = reply;
+
+                            // return true => send own reply without processing
+                            return Ok(true);
+                        }
+                    }
+                }
                 SENSOR_MESSAGE_BATCH => {
                     if let Ok(mut msg) = SensorBatch::parse_from_bytes(data) {
                         if !msg.driving_status_data.is_empty() {
@@ -405,6 +433,44 @@ pub async fn pkt_modify_hook(
                     control.unwrap(),
                 );
             }
+
+            // EV routing features
+            if ev {
+                if let Some(svc) = msg
+                    .services
+                    .iter_mut()
+                    .find(|svc| !svc.sensor_source_service.sensors.is_empty())
+                {
+                    // add VEHICLE_ENERGY_MODEL_DATA sensor
+                    let mut sensor = Sensor::new();
+                    sensor.set_sensor_type(SENSOR_VEHICLE_ENERGY_MODEL_DATA);
+                    svc.sensor_source_service
+                        .as_mut()
+                        .unwrap()
+                        .sensors
+                        .push(sensor);
+
+                    // set FUEL_TYPE
+                    svc.sensor_source_service
+                        .as_mut()
+                        .unwrap()
+                        .supported_fuel_types = vec![FuelType::FUEL_TYPE_ELECTRIC.into()];
+
+                    // supported connector types
+                    // FIXME: make this connectors configurable via config
+                    svc.sensor_source_service
+                        .as_mut()
+                        .unwrap()
+                        .supported_ev_connector_types =
+                        vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()];
+                }
+            }
+
+            debug!(
+                "{} SDR after changes: {}",
+                get_name(proxy_type),
+                protobuf::text_format::print_to_string_pretty(&msg)
+            );
 
             // rewrite payload to new message contents
             pkt.payload = msg.write_to_bytes()?;
