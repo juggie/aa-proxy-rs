@@ -436,6 +436,7 @@ fn main() {
     let hex_requested = config.hexdump_level;
     let wired = config.wired.clone();
     let dhu = config.dhu;
+    let ev = config.ev;
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -457,6 +458,7 @@ fn main() {
         hex_requested,
         wired,
         dhu,
+        ev,
     ));
 
     info!(

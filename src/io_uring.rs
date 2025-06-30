@@ -204,6 +204,7 @@ pub async fn io_loop(
     hex_requested: HexdumpLevel,
     wired: Option<UsbId>,
     dhu: bool,
+    ev: bool,
 ) -> Result<()> {
     // prepare/bind needed TCP listeners
     let mut dhu_listener = None;
@@ -364,6 +365,7 @@ pub async fn io_loop(
             video_in_motion,
             !mitm,
             hex_requested,
+            ev,
         ));
         from_stream = tokio_uring::spawn(proxy(
             ProxyType::MobileDevice,
@@ -380,6 +382,7 @@ pub async fn io_loop(
             video_in_motion,
             !mitm,
             hex_requested,
+            ev,
         ));
 
         // Thread for monitoring transfer

@@ -264,6 +264,7 @@ pub async fn pkt_modify_hook(
     disable_tts_sink: bool,
     remove_tap_restriction: bool,
     video_in_motion: bool,
+    ev: bool,
     ctx: &mut ModifyContext,
 ) -> Result<bool> {
     // if for some reason we have too small packet, bail out
@@ -580,6 +581,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     video_in_motion: bool,
     passthrough: bool,
     hex_requested: HexdumpLevel,
+    ev: bool,
 ) -> Result<()> {
     // in full_frames/passthrough mode we only directly pass packets from one endpoint to the other
     if passthrough {
@@ -720,6 +722,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 disable_tts_sink,
                 remove_tap_restriction,
                 video_in_motion,
+                ev,
                 &mut ctx,
             )
             .await?;
