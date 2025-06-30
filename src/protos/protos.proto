@@ -1,4 +1,5 @@
 syntax = "proto2";
+import "ev.proto";
 
 message PhoneInfo {
   optional string instance_id = 1;
@@ -327,6 +328,7 @@ message SensorBatch {
   repeated GyroscopeData gyroscope_data = 20;
   repeated GpsSatelliteData gps_satellite_data = 21;
   repeated TollCardData toll_card_data = 22;
+  repeated EnergyModelControl energy_model_control = 23;
 }
 
 message SensorError {
