@@ -25,6 +25,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
+use crate::ev::RestContext;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
@@ -267,6 +268,7 @@ pub async fn pkt_modify_hook(
     video_in_motion: bool,
     ev: bool,
     ctx: &mut ModifyContext,
+    rest_ctx: Option<Arc<tokio::sync::Mutex<RestContext>>>,
 ) -> Result<bool> {
     // if for some reason we have too small packet, bail out
     if pkt.payload.len() < 2 {
@@ -310,13 +312,15 @@ pub async fn pkt_modify_hook(
                 }
                 SENSOR_MESSAGE_BATCH => {
                     if let Ok(mut msg) = SensorBatch::parse_from_bytes(data) {
-                        if !msg.driving_status_data.is_empty() {
-                            // forcing status to 0 value
-                            msg.driving_status_data[0].set_status(0);
-                            // regenerating payload data
-                            pkt.payload = msg.write_to_bytes()?;
-                            pkt.payload.insert(0, (message_id >> 8) as u8);
-                            pkt.payload.insert(1, (message_id & 0xff) as u8);
+                        if video_in_motion {
+                            if !msg.driving_status_data.is_empty() {
+                                // forcing status to 0 value
+                                msg.driving_status_data[0].set_status(0);
+                                // regenerating payload data
+                                pkt.payload = msg.write_to_bytes()?;
+                                pkt.payload.insert(0, (message_id >> 8) as u8);
+                                pkt.payload.insert(1, (message_id & 0xff) as u8);
+                            }
                         }
                     }
                 }
@@ -390,20 +394,19 @@ pub async fn pkt_modify_hook(
                 );
             }
 
-            // obtain SENSOR_DRIVING_STATUS_DATA sensor channel
-            if video_in_motion {
+            // save sensor channel in context
+            if ev || video_in_motion {
                 if let Some(svc) = msg
                     .services
                     .iter()
                     .find(|svc| !svc.sensor_source_service.sensors.is_empty())
                 {
-                    if let Some(_) = svc
-                        .sensor_source_service
-                        .sensors
-                        .iter()
-                        .find(|s| s.sensor_type() == SENSOR_DRIVING_STATUS_DATA)
-                    {
-                        ctx.sensor_channel = Some(svc.id() as u8);
+                    // set in local context
+                    ctx.sensor_channel = Some(svc.id() as u8);
+                    // set in REST server context for remote EV requests
+                    if let Some(ctx) = rest_ctx {
+                        let mut rest_ctx = ctx.lock().await;
+                        rest_ctx.sensor_channel = Some(svc.id() as u8);
                     }
                 }
             }
@@ -648,6 +651,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     passthrough: bool,
     hex_requested: HexdumpLevel,
     ev: bool,
+    rest_ctx: Option<Arc<tokio::sync::Mutex<RestContext>>>,
 ) -> Result<()> {
     // in full_frames/passthrough mode we only directly pass packets from one endpoint to the other
     if passthrough {
@@ -790,6 +794,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 video_in_motion,
                 ev,
                 &mut ctx,
+                rest_ctx.clone(),
             )
             .await?;
             let _ = pkt_debug(
