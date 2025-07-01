@@ -12,14 +12,15 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
 - reconnecting: trying to reconnect/recover AndroidAuto connection in any possible case
 - bandwidth/transfer statistics
 - stall transfer detection
-- MITM (man-in-the-middle) mode support with the following features:
+- [MITM (man-in-the-middle) mode](#mitm-mode) support with the following features:
   - DPI change
   - Remove tap restriction
   - Disable media sink
   - Disable TTS sink
   - Video in motion
   - Developer mode
-  - Wired USB connection mode (without Bluetooth handshake and WiFi)
+- [Google Maps EV Routing](#google-maps-ev-routing) support
+- Wired phone USB connection mode (without Bluetooth handshake and WiFi)
 - Google `Desktop Head Unit` emulator support for debugging purposes
 
 ## Current project status
@@ -196,6 +197,33 @@ Example with Google Maps, where a `Report` button is available after changing th
 |160 DPI (default)|130 DPI|
 |---|---|
 |![](images/160dpi.png)|![](images/130dpi.png)
+
+## Google Maps EV routing
+Google introduced EV routing features at [CES24](https://blog.google/products/android/android-auto-new-features-ces24/). The first cars to support this via Android Auto are the Ford Mustang Mach-E and F-150 Lightning.
+
+This clip shows how it works in the car:<br>
+[![This is a clip how it works in the car](https://img.youtube.com/vi/M1qf9Psu6g8/hqdefault.jpg)](https://www.youtube.com/embed/M1qf9Psu6g8)
+
+The idea of using this feature with other cars started here: https://github.com/manio/aa-proxy-rs/issues/19 in February 2025.
+After a long journey searching for someone with the knowledge and hardware that could help us obtain the logs, we finally, at the end of June 2025, thanks to [@SquidBytes](https://github.com/SquidBytes), got the sample data to analyze.
+
+Thanks to many hours of work by [@Deadknight](https://github.com/Deadknight) and [@gamelaster](https://github.com/gamelaster), we were finally able to make some use of that data.
+Unfortunately, the work is still in progress, but I am currently at a stage where, by customizing some parameters, I can provide real-time battery level data to `aa-proxy-rs`, and overall it makes correct estimates for my car.
+
+`aa-proxy-rs` has an embedded REST server for obtaining battery data from any source (I am using a slightly modified version of the [canze-rs](https://github.com/manio/canze-rs) app for this purpose).
+It reads the data on the same Raspberry Pi (connecting wirelessly to the Bluetooth OBD dongle).
+
+`aa-proxy-rs` can be configured to execute a specific data collection script when Android Auto starts and needs the battery level data, and also when it stops.
+The script can be configured in `config.toml` and is executed with the arguments `start` and `stop` accordingly.
+
+Here's a `curl` example to feed the data:<br>
+```bash
+curl -X POST http://localhost:3030/battery \
+     -H "Content-Type: application/json" \
+     -d '{"battery_level": 87.5}'
+```
+
+Thanks to the power of open source, even older EVs can now enjoy modern features and a much better navigation experience!
 
 ## Troubleshooting
 Sometimes deleting the system Bluetooth cache at /var/lib/bluetooth and restarting bluetoothd fixes persistent issues with device connectivity.

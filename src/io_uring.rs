@@ -3,12 +3,14 @@ use humantime::format_duration;
 use simplelog::*;
 use std::cell::RefCell;
 use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::{mpsc, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
@@ -31,6 +33,7 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
+use crate::ev::{rest_server, RestContext};
 use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
 use crate::mitm::Packet;
@@ -204,6 +207,8 @@ pub async fn io_loop(
     hex_requested: HexdumpLevel,
     wired: Option<UsbId>,
     dhu: bool,
+    ev: bool,
+    ev_battery_logger: Option<PathBuf>,
 ) -> Result<()> {
     // prepare/bind needed TCP listeners
     let mut dhu_listener = None;
@@ -345,6 +350,20 @@ pub async fn io_loop(
             hu_w = IoDevice::TcpStreamIo(hu.clone());
         }
 
+        // handling battery in JSON
+        let mut rest_server_handle = None;
+        let mut rest_ctx = None;
+        if mitm && ev {
+            let ctx = RestContext {
+                sensor_channel: None,
+            };
+            let ctx = Arc::new(Mutex::new(ctx));
+
+            let tx = tx_hu.clone();
+            rest_server_handle = Some(tokio::spawn(rest_server(tx, ctx.clone())));
+            rest_ctx = Some(ctx);
+        }
+
         // dedicated reading threads:
         reader_hu = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
         reader_md = tokio_uring::spawn(endpoint_reader(md_r, txr_md));
@@ -353,7 +372,7 @@ pub async fn io_loop(
             ProxyType::HeadUnit,
             hu_w,
             stream_bytes.clone(),
-            tx_hu,
+            tx_hu.clone(),
             rx_hu,
             rxr_md,
             dpi,
@@ -364,6 +383,9 @@ pub async fn io_loop(
             video_in_motion,
             !mitm,
             hex_requested,
+            ev,
+            rest_ctx.clone(),
+            ev_battery_logger.clone(),
         ));
         from_stream = tokio_uring::spawn(proxy(
             ProxyType::MobileDevice,
@@ -380,6 +402,9 @@ pub async fn io_loop(
             video_in_motion,
             !mitm,
             hex_requested,
+            ev,
+            rest_ctx.clone(),
+            ev_battery_logger.clone(),
         ));
 
         // Thread for monitoring transfer
@@ -413,6 +438,13 @@ pub async fn io_loop(
         from_file.abort();
         from_stream.abort();
         monitor.abort();
+        if let Some(handle) = rest_server_handle {
+            handle.abort();
+        }
+        // stop EV battery logger if neded
+        if let Some(ref path) = ev_battery_logger {
+            let _ = Command::new(path).arg("stop").spawn();
+        }
 
         info!(
             "{} ⌛ session time: {}",

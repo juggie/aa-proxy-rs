@@ -48,6 +48,7 @@ fn main() {
         .input("src/protos/WifiStartRequest.proto")
         .input("src/protos/WifiInfoResponse.proto")
         .input("src/protos/protos.proto")
+        .input("src/protos/ev.proto")
         // Specify output directory relative to Cargo output directory.
         .cargo_out_dir("protos")
         .run_from_script();

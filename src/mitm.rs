@@ -4,6 +4,8 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -17,6 +19,7 @@ use tokio_uring::buf::BoundedBuf;
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::mitm::protos::*;
+use crate::mitm::sensor_source_service::Sensor;
 use crate::mitm::AudioStreamType::*;
 use crate::mitm::SensorMessageId::*;
 use crate::mitm::SensorType::*;
@@ -24,6 +27,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
+use crate::ev::RestContext;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
@@ -106,10 +110,10 @@ impl SslMemBuf {
 }
 
 pub struct Packet {
-    channel: u8,
-    flags: u8,
-    final_length: Option<u32>,
-    payload: Vec<u8>,
+    pub channel: u8,
+    pub flags: u8,
+    pub final_length: Option<u32>,
+    pub payload: Vec<u8>,
 }
 
 impl Packet {
@@ -264,7 +268,10 @@ pub async fn pkt_modify_hook(
     disable_tts_sink: bool,
     remove_tap_restriction: bool,
     video_in_motion: bool,
+    ev: bool,
     ctx: &mut ModifyContext,
+    rest_ctx: Option<Arc<tokio::sync::Mutex<RestContext>>>,
+    ev_battery_logger: Option<PathBuf>,
 ) -> Result<bool> {
     // if for some reason we have too small packet, bail out
     if pkt.payload.len() < 2 {
@@ -275,19 +282,53 @@ pub async fn pkt_modify_hook(
     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
     let data = &pkt.payload[2..]; // start of message data
 
-    // handling driving_status_data change
+    // handling data on sensor channel
     if let Some(ch) = ctx.sensor_channel {
         if ch == pkt.channel {
             match protos::SensorMessageId::from_i32(message_id).unwrap_or(SENSOR_MESSAGE_ERROR) {
+                SENSOR_MESSAGE_REQUEST => {
+                    if let Ok(msg) = SensorRequest::parse_from_bytes(data) {
+                        if msg.type_() == SensorType::SENSOR_VEHICLE_ENERGY_MODEL_DATA {
+                            debug!(
+                                "additional SENSOR_MESSAGE_REQUEST for {:?}, making a response with success...",
+                                msg.type_()
+                            );
+                            let mut response = SensorResponse::new();
+                            response.set_status(MessageStatus::STATUS_SUCCESS);
+
+                            let mut payload: Vec<u8> = response.write_to_bytes()?;
+                            payload.insert(0, ((SENSOR_MESSAGE_RESPONSE as u16) >> 8) as u8);
+                            payload.insert(1, ((SENSOR_MESSAGE_RESPONSE as u16) & 0xff) as u8);
+
+                            let reply = Packet {
+                                channel: ch,
+                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload,
+                            };
+                            *pkt = reply;
+
+                            // start EV battery logger if neded
+                            if let Some(ref path) = ev_battery_logger {
+                                let _ = Command::new(path).arg("start").spawn();
+                            }
+
+                            // return true => send own reply without processing
+                            return Ok(true);
+                        }
+                    }
+                }
                 SENSOR_MESSAGE_BATCH => {
                     if let Ok(mut msg) = SensorBatch::parse_from_bytes(data) {
-                        if !msg.driving_status_data.is_empty() {
-                            // forcing status to 0 value
-                            msg.driving_status_data[0].set_status(0);
-                            // regenerating payload data
-                            pkt.payload = msg.write_to_bytes()?;
-                            pkt.payload.insert(0, (message_id >> 8) as u8);
-                            pkt.payload.insert(1, (message_id & 0xff) as u8);
+                        if video_in_motion {
+                            if !msg.driving_status_data.is_empty() {
+                                // forcing status to 0 value
+                                msg.driving_status_data[0].set_status(0);
+                                // regenerating payload data
+                                pkt.payload = msg.write_to_bytes()?;
+                                pkt.payload.insert(0, (message_id >> 8) as u8);
+                                pkt.payload.insert(1, (message_id & 0xff) as u8);
+                            }
                         }
                     }
                 }
@@ -298,7 +339,7 @@ pub async fn pkt_modify_hook(
         return Ok(false);
     }
 
-    if pkt.channel != 0 {
+    if pkt.channel != 0 || proxy_type == ProxyType::MobileDevice {
         return Ok(false);
     }
     // trying to obtain an Enum from message_id
@@ -361,20 +402,19 @@ pub async fn pkt_modify_hook(
                 );
             }
 
-            // obtain SENSOR_DRIVING_STATUS_DATA sensor channel
-            if video_in_motion {
+            // save sensor channel in context
+            if ev || video_in_motion {
                 if let Some(svc) = msg
                     .services
                     .iter()
                     .find(|svc| !svc.sensor_source_service.sensors.is_empty())
                 {
-                    if let Some(_) = svc
-                        .sensor_source_service
-                        .sensors
-                        .iter()
-                        .find(|s| s.sensor_type() == SENSOR_DRIVING_STATUS_DATA)
-                    {
-                        ctx.sensor_channel = Some(svc.id() as u8);
+                    // set in local context
+                    ctx.sensor_channel = Some(svc.id() as u8);
+                    // set in REST server context for remote EV requests
+                    if let Some(ctx) = rest_ctx {
+                        let mut rest_ctx = ctx.lock().await;
+                        rest_ctx.sensor_channel = Some(svc.id() as u8);
                     }
                 }
             }
@@ -404,6 +444,44 @@ pub async fn pkt_modify_hook(
                     control.unwrap(),
                 );
             }
+
+            // EV routing features
+            if ev {
+                if let Some(svc) = msg
+                    .services
+                    .iter_mut()
+                    .find(|svc| !svc.sensor_source_service.sensors.is_empty())
+                {
+                    // add VEHICLE_ENERGY_MODEL_DATA sensor
+                    let mut sensor = Sensor::new();
+                    sensor.set_sensor_type(SENSOR_VEHICLE_ENERGY_MODEL_DATA);
+                    svc.sensor_source_service
+                        .as_mut()
+                        .unwrap()
+                        .sensors
+                        .push(sensor);
+
+                    // set FUEL_TYPE
+                    svc.sensor_source_service
+                        .as_mut()
+                        .unwrap()
+                        .supported_fuel_types = vec![FuelType::FUEL_TYPE_ELECTRIC.into()];
+
+                    // supported connector types
+                    // FIXME: make this connectors configurable via config
+                    svc.sensor_source_service
+                        .as_mut()
+                        .unwrap()
+                        .supported_ev_connector_types =
+                        vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()];
+                }
+            }
+
+            debug!(
+                "{} SDR after changes: {}",
+                get_name(proxy_type),
+                protobuf::text_format::print_to_string_pretty(&msg)
+            );
 
             // rewrite payload to new message contents
             pkt.payload = msg.write_to_bytes()?;
@@ -580,6 +658,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     video_in_motion: bool,
     passthrough: bool,
     hex_requested: HexdumpLevel,
+    ev: bool,
+    rest_ctx: Option<Arc<tokio::sync::Mutex<RestContext>>>,
+    ev_battery_logger: Option<PathBuf>,
 ) -> Result<()> {
     // in full_frames/passthrough mode we only directly pass packets from one endpoint to the other
     if passthrough {
@@ -720,7 +801,10 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 disable_tts_sink,
                 remove_tap_restriction,
                 video_in_motion,
+                ev,
                 &mut ctx,
+                rest_ctx.clone(),
+                ev_battery_logger.clone(),
             )
             .await?;
             let _ = pkt_debug(
@@ -753,6 +837,21 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
             match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
                 Ok(_) => {
+                    let _ = pkt_modify_hook(
+                        proxy_type,
+                        &mut pkt,
+                        dpi,
+                        developer_mode,
+                        disable_media_sink,
+                        disable_tts_sink,
+                        remove_tap_restriction,
+                        video_in_motion,
+                        ev,
+                        &mut ctx,
+                        rest_ctx.clone(),
+                        ev_battery_logger.clone(),
+                    )
+                    .await?;
                     let _ = pkt_debug(
                         proxy_type,
                         HexdumpLevel::DecryptedInput,
