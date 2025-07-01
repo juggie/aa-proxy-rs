@@ -3,6 +3,8 @@ use humantime::format_duration;
 use simplelog::*;
 use std::cell::RefCell;
 use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -206,6 +208,7 @@ pub async fn io_loop(
     wired: Option<UsbId>,
     dhu: bool,
     ev: bool,
+    ev_battery_logger: Option<PathBuf>,
 ) -> Result<()> {
     // prepare/bind needed TCP listeners
     let mut dhu_listener = None;
@@ -382,6 +385,7 @@ pub async fn io_loop(
             hex_requested,
             ev,
             rest_ctx.clone(),
+            ev_battery_logger.clone(),
         ));
         from_stream = tokio_uring::spawn(proxy(
             ProxyType::MobileDevice,
@@ -400,6 +404,7 @@ pub async fn io_loop(
             hex_requested,
             ev,
             rest_ctx.clone(),
+            ev_battery_logger.clone(),
         ));
 
         // Thread for monitoring transfer
@@ -435,6 +440,10 @@ pub async fn io_loop(
         monitor.abort();
         if let Some(handle) = rest_server_handle {
             handle.abort();
+        }
+        // stop EV battery logger if neded
+        if let Some(ref path) = ev_battery_logger {
+            let _ = Command::new(path).arg("stop").spawn();
         }
 
         info!(

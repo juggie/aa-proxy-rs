@@ -140,6 +140,7 @@ pub struct AppConfig {
     wired: Option<UsbId>,
     dhu: bool,
     ev: bool,
+    ev_battery_logger: Option<PathBuf>,
 }
 
 impl Default for AppConfig {
@@ -170,6 +171,7 @@ impl Default for AppConfig {
             wired: None,
             dhu: false,
             ev: false,
+            ev_battery_logger: None,
         }
     }
 }
@@ -438,6 +440,7 @@ fn main() {
     let wired = config.wired.clone();
     let dhu = config.dhu;
     let ev = config.ev;
+    let ev_battery_logger = config.ev_battery_logger.clone();
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -460,6 +463,7 @@ fn main() {
         wired,
         dhu,
         ev,
+        ev_battery_logger,
     ));
 
     info!(

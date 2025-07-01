@@ -4,6 +4,8 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -269,6 +271,7 @@ pub async fn pkt_modify_hook(
     ev: bool,
     ctx: &mut ModifyContext,
     rest_ctx: Option<Arc<tokio::sync::Mutex<RestContext>>>,
+    ev_battery_logger: Option<PathBuf>,
 ) -> Result<bool> {
     // if for some reason we have too small packet, bail out
     if pkt.payload.len() < 2 {
@@ -304,6 +307,11 @@ pub async fn pkt_modify_hook(
                                 payload: payload,
                             };
                             *pkt = reply;
+
+                            // start EV battery logger if neded
+                            if let Some(ref path) = ev_battery_logger {
+                                let _ = Command::new(path).arg("start").spawn();
+                            }
 
                             // return true => send own reply without processing
                             return Ok(true);
@@ -652,6 +660,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     hex_requested: HexdumpLevel,
     ev: bool,
     rest_ctx: Option<Arc<tokio::sync::Mutex<RestContext>>>,
+    ev_battery_logger: Option<PathBuf>,
 ) -> Result<()> {
     // in full_frames/passthrough mode we only directly pass packets from one endpoint to the other
     if passthrough {
@@ -795,6 +804,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 ev,
                 &mut ctx,
                 rest_ctx.clone(),
+                ev_battery_logger.clone(),
             )
             .await?;
             let _ = pkt_debug(
@@ -839,6 +849,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                         ev,
                         &mut ctx,
                         rest_ctx.clone(),
+                        ev_battery_logger.clone(),
                     )
                     .await?;
                     let _ = pkt_debug(
