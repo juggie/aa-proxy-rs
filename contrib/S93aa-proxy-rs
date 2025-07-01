@@ -7,7 +7,7 @@
 
 DAEMON="aa-proxy-rs"
 PIDFILE="/var/run/$DAEMON.pid"
-AA_PROXY_RS_ARGS="-c -s60"
+AA_PROXY_RS_ARGS=""
 
 RETVAL=0
 
