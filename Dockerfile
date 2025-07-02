@@ -8,6 +8,7 @@ RUN rustup target add arm-unknown-linux-gnueabihf
 WORKDIR /usr/src/app
 RUN git clone https://github.com/manio/aa-proxy-rs .
 RUN cargo build --release
+RUN arm-linux-gnueabihf-strip target/arm-unknown-linux-gnueabihf/release/aa-proxy-rs
 # Pi Zero W needs special linking/building (https://github.com/manio/aa-proxy-rs/issues/3)
 RUN git clone --depth=1 https://github.com/raspberrypi/tools
 RUN CARGO_TARGET_DIR=pi0w CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER="./tools/arm-bcm2708/arm-rpi-4.9.3-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc" cargo build --release
