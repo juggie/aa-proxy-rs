@@ -88,3 +88,9 @@
   # Path to script executed when Android Auto session starts/stops and EV battery data is needed
   # Argument "start" or "stop" is appended automatically when invoked
   # ev_battery_logger = "/usr/bin/some_script"
+
+  # Traction battery capacity [Wh]
+  ev_battery_capacity = 22000
+
+  # Some unknown parameter - change this to have a correct range (u2->u3)
+  ev_factor = 0.075

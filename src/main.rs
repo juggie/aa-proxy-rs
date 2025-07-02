@@ -141,6 +141,8 @@ pub struct AppConfig {
     dhu: bool,
     ev: bool,
     ev_battery_logger: Option<PathBuf>,
+    ev_battery_capacity: u64,
+    ev_factor: f32,
 }
 
 impl Default for AppConfig {
@@ -172,6 +174,8 @@ impl Default for AppConfig {
             dhu: false,
             ev: false,
             ev_battery_logger: None,
+            ev_battery_capacity: 22000,
+            ev_factor: 0.075,
         }
     }
 }
