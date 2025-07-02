@@ -150,7 +150,7 @@ impl Default for AppConfig {
             debug: false,
             hexdump_level: HexdumpLevel::Disabled,
             disable_console_debug: false,
-            legacy: false,
+            legacy: true,
             connect: None,
             logfile: "/var/log/aa-proxy-rs.log".into(),
             stats_interval: 0,

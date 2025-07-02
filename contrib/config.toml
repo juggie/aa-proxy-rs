@@ -10,7 +10,7 @@
   timeout_secs = 10
 
   # Enable legacy USB mode (some HeadUnits/cars needs this enabled for compatibility)
-  legacy = false
+  legacy = true
 
   # Enable wired USB connection to phone (VID:PID should be specified, zero is wildcard and can be used for single or both fields)
   # you can obtain it e.g. using `lsusb` after connecting phone,
