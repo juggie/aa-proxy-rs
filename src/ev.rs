@@ -32,6 +32,8 @@ pub struct BatteryData {
 #[derive(Clone)]
 pub struct RestContext {
     pub sensor_channel: Option<u8>,
+    pub ev_battery_capacity: u64,
+    pub ev_factor: f32,
 }
 
 pub async fn rest_server(tx: Sender<Packet>, ctx: Arc<Mutex<RestContext>>) -> Result<()> {
@@ -59,7 +61,14 @@ pub async fn rest_server(tx: Sender<Packet>, ctx: Arc<Mutex<RestContext>>) -> Re
                 info!("{} Received battery level: {}", NAME, data.battery_level);
                 let rest_ctx = ctx.lock().await;
                 if let Some(ch) = rest_ctx.sensor_channel {
-                    let _ = send_ev_data(tx, data.battery_level, ch).await;
+                    let _ = send_ev_data(
+                        tx,
+                        data.battery_level,
+                        ch,
+                        rest_ctx.ev_battery_capacity,
+                        rest_ctx.ev_factor,
+                    )
+                    .await;
                 } else {
                     warn!("{} Not sending packet because no sensor channel yet", NAME);
                 }
@@ -84,7 +93,13 @@ fn scale_percent_to_value(percent: f32, max_value: u64) -> u64 {
 }
 
 /// EV sensor batch data send
-pub async fn send_ev_data(tx: Sender<Packet>, level: f32, sensor_ch: u8) -> Result<()> {
+pub async fn send_ev_data(
+    tx: Sender<Packet>,
+    level: f32,
+    sensor_ch: u8,
+    ev_battery_capacity: u64,
+    ev_factor: f32,
+) -> Result<()> {
     // parse initial sample Ford data
     let mut msg = SensorBatch::parse_from_bytes(FORD_EV_MODEL)?;
 
@@ -105,7 +120,7 @@ pub async fn send_ev_data(tx: Sender<Packet>, level: f32, sensor_ch: u8) -> Resu
         .u3
         .as_mut()
         .unwrap()
-        .u1 = 0.075;
+        .u1 = ev_factor;
 
     // kwh in battery?
     msg.energy_model_control[0]
@@ -115,7 +130,7 @@ pub async fn send_ev_data(tx: Sender<Packet>, level: f32, sensor_ch: u8) -> Resu
         .u3
         .as_mut()
         .unwrap()
-        .u1 = scale_percent_to_value(level, 22000);
+        .u1 = scale_percent_to_value(level, ev_battery_capacity);
     // max battery kwh?
     msg.energy_model_control[0]
         .u1
@@ -124,7 +139,7 @@ pub async fn send_ev_data(tx: Sender<Packet>, level: f32, sensor_ch: u8) -> Resu
         .u4
         .as_mut()
         .unwrap()
-        .u1 = 22000;
+        .u1 = ev_battery_capacity;
 
     // creating back binary data for sending
     let mut payload: Vec<u8> = msg.write_to_bytes()?;

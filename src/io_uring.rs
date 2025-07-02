@@ -209,6 +209,8 @@ pub async fn io_loop(
     dhu: bool,
     ev: bool,
     ev_battery_logger: Option<PathBuf>,
+    ev_battery_capacity: u64,
+    ev_factor: f32,
 ) -> Result<()> {
     // prepare/bind needed TCP listeners
     let mut dhu_listener = None;
@@ -356,6 +358,8 @@ pub async fn io_loop(
         if mitm && ev {
             let ctx = RestContext {
                 sensor_channel: None,
+                ev_battery_capacity,
+                ev_factor,
             };
             let ctx = Arc::new(Mutex::new(ctx));
 

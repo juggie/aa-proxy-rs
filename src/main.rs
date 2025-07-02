@@ -445,6 +445,8 @@ fn main() {
     let dhu = config.dhu;
     let ev = config.ev;
     let ev_battery_logger = config.ev_battery_logger.clone();
+    let ev_battery_capacity = config.ev_battery_capacity.clone();
+    let ev_factor = config.ev_factor.clone();
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
@@ -468,6 +470,8 @@ fn main() {
         dhu,
         ev,
         ev_battery_logger,
+        ev_battery_capacity,
+        ev_factor,
     ));
 
     info!(
