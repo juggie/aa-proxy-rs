@@ -16,6 +16,7 @@ for filename in *img; do
 	echo ">>> processing $filename..."
 	mount -o loop,offset=33554944 $filename /mnt
 	rm /mnt/etc/init.d/S93aawgd
+	rm /mnt/usr/bin/aawgd
 	cp /root/S93aa-proxy-rs /mnt/etc/init.d
 	mkdir /mnt/etc/aa-proxy-rs
 	cp /root/config.toml /mnt/etc/aa-proxy-rs
