@@ -15,13 +15,13 @@
   # Enable wired USB connection to phone (VID:PID should be specified, zero is wildcard and can be used for single or both fields)
   # you can obtain it e.g. using `lsusb` after connecting phone,
   # and then use e.g. "18d1:0" which will handle specified phone vendor ID (Google Pixel in this example)
-  # wired = "0000:0000"
+  wired = ""
 
   # Use a Google Android Auto Desktop Head Unit emulator instead of real HU device (will listen on TCP 5277 port)
   dhu = false
 
   # UDC Controller name (used in special configurations)
-  # udc = "dummy_udc.0"
+  udc = ""
 
 ### DEBUGGING
   # Enable debug info
@@ -38,9 +38,11 @@
   advertise = false
 
   # BLE device name (how your bluetooth device is visible)
-  # btalias = "WirelessAADongle"
+  # by default it is WirelessAADongle-CPUSERIAL
+  btalias = ""
 
   # Auto-connect to phone and initiate connection
+  # empty string/no value: don't auto-connect,
   # zeros/wildcard: iterate over all previously connected devices,
   # set it to phone BT MAC address for connecting to this specific phone
   connect = "00:00:00:00:00:00"
@@ -87,7 +89,7 @@
 
   # Path to script executed when Android Auto session starts/stops and EV battery data is needed
   # Argument "start" or "stop" is appended automatically when invoked
-  # ev_battery_logger = "/usr/bin/some_script"
+  ev_battery_logger = ""
 
   # Traction battery capacity [Wh]
   ev_battery_capacity = 22000

@@ -17,9 +17,9 @@ use simplelog::*;
 use usb_gadget::uevent_listener;
 use usb_gadget::UsbGadgetState;
 
-use serde::de::{self, Deserializer, Visitor};
+use serde::de::{self, Deserializer, Error as DeError, Visitor};
 use serde::Deserialize;
-use std::fmt;
+use std::fmt::{self, Display};
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -112,6 +112,20 @@ struct Args {
     config: PathBuf,
 }
 
+pub fn empty_string_as_none<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: FromStr,
+    T::Err: Display,
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    if s.trim().is_empty() {
+        Ok(None)
+    } else {
+        T::from_str(&s).map(Some).map_err(DeError::custom)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
@@ -120,12 +134,15 @@ pub struct AppConfig {
     hexdump_level: HexdumpLevel,
     disable_console_debug: bool,
     legacy: bool,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     connect: Option<Address>,
     logfile: PathBuf,
     stats_interval: u16,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     udc: Option<String>,
     iface: String,
     hostapd_conf: PathBuf,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     btalias: Option<String>,
     keepalive: bool,
     timeout_secs: u16,
@@ -137,9 +154,11 @@ pub struct AppConfig {
     disable_media_sink: bool,
     disable_tts_sink: bool,
     developer_mode: bool,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     wired: Option<UsbId>,
     dhu: bool,
     ev: bool,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     ev_battery_logger: Option<PathBuf>,
     ev_battery_capacity: u64,
     ev_factor: f32,
