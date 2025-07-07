@@ -27,8 +27,8 @@
   # Enable debug info
   debug = false
 
-  # Hex dump level [possible values: disabled, decrypted-input, raw-input, decrypted-output, raw-output, all]
-  hexdump_level = "disabled"
+  # Hex dump level [possible values: Disabled, DecryptedInput, RawInput, DecryptedOutput, RawOutput, All]
+  hexdump_level = "Disabled"
 
   # Disable debug level on console, save it only to logfile (helpful for `hexdump-level` option)
   disable_console_debug = false
