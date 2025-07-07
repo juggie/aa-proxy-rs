@@ -198,7 +198,7 @@ pub async fn io_loop(
     tcp_start: Arc<Notify>,
     read_timeout: Duration,
     mitm: bool,
-    dpi: Option<u16>,
+    dpi: u16,
     developer_mode: bool,
     disable_media_sink: bool,
     disable_tts_sink: bool,

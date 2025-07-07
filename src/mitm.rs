@@ -262,7 +262,7 @@ pub async fn pkt_debug(
 pub async fn pkt_modify_hook(
     proxy_type: ProxyType,
     pkt: &mut Packet,
-    dpi: Option<u16>,
+    dpi: u16,
     developer_mode: bool,
     disable_media_sink: bool,
     disable_tts_sink: bool,
@@ -352,7 +352,7 @@ pub async fn pkt_modify_hook(
             let mut msg = ServiceDiscoveryResponse::parse_from_bytes(data)?;
 
             // DPI
-            if let Some(new_dpi) = dpi {
+            if dpi > 0 {
                 if let Some(svc) = msg
                     .services
                     .iter_mut()
@@ -362,13 +362,13 @@ pub async fn pkt_modify_hook(
                     let prev_val = svc.media_sink_service.video_configs[0].density();
                     // set new value
                     svc.media_sink_service.as_mut().unwrap().video_configs[0]
-                        .set_density(new_dpi.into());
+                        .set_density(dpi.into());
                     info!(
                         "{} <yellow>{:?}</>: replacing DPI value: from <b>{}</> to <b>{}</>",
                         get_name(proxy_type),
                         control.unwrap(),
                         prev_val,
-                        new_dpi
+                        dpi
                     );
                 }
             }
@@ -650,7 +650,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     tx: Sender<Packet>,
     mut rx: Receiver<Packet>,
     mut rxr: Receiver<Packet>,
-    dpi: Option<u16>,
+    dpi: u16,
     developer_mode: bool,
     disable_media_sink: bool,
     disable_tts_sink: bool,

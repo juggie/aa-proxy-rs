@@ -66,7 +66,8 @@
   mitm = false
 
   # Force DPI
-  # dpi = 130
+  # 0 = don't change DPI
+  dpi = 0
 
   # remove tap restriction
   remove_tap_restriction = false
