@@ -27,11 +27,11 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
+use crate::config::HexdumpLevel;
 use crate::ev::RestContext;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
-use crate::HexdumpLevel;
 
 // module name for logging engine
 fn get_name(proxy_type: ProxyType) -> String {

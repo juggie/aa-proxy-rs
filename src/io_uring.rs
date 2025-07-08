@@ -33,6 +33,8 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
+use crate::config::HexdumpLevel;
+use crate::config::UsbId;
 use crate::ev::{rest_server, RestContext};
 use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
@@ -40,8 +42,6 @@ use crate::mitm::Packet;
 use crate::mitm::ProxyType;
 use crate::usb_stream;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
-use crate::HexdumpLevel;
-use crate::UsbId;
 use crate::{TCP_DHU_PORT, TCP_SERVER_PORT};
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different

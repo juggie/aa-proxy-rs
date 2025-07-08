@@ -1,12 +1,14 @@
 mod aoa;
 mod bluetooth;
+mod config;
 mod ev;
 mod io_uring;
 mod mitm;
 mod usb_gadget;
 mod usb_stream;
+mod web;
 
-use bluer::Address;
+use crate::config::AppConfig;
 use bluetooth::bluetooth_setup_connection;
 use bluetooth::bluetooth_stop;
 use clap::Parser;
@@ -17,17 +19,16 @@ use simplelog::*;
 use usb_gadget::uevent_listener;
 use usb_gadget::UsbGadgetState;
 
-use serde::de::{self, Deserializer, Error as DeError, Visitor};
-use serde::Deserialize;
-use std::fmt::{self, Display};
 use std::fs::OpenOptions;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Builder;
 use tokio::sync::Notify;
 use tokio::time::Instant;
+
+use std::net::SocketAddr;
+use std::sync::Mutex;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> main: </>";
@@ -35,63 +36,6 @@ const NAME: &str = "<i><bright-black> main: </>";
 const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
 const TCP_SERVER_PORT: i32 = 5288;
 const TCP_DHU_PORT: i32 = 5277;
-
-#[derive(clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy, Deserialize)]
-pub enum HexdumpLevel {
-    #[default]
-    Disabled,
-    DecryptedInput,
-    RawInput,
-    DecryptedOutput,
-    RawOutput,
-    All,
-}
-
-#[derive(Debug, Clone)]
-struct UsbId {
-    vid: u16,
-    pid: u16,
-}
-
-impl std::str::FromStr for UsbId {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split(':').collect();
-        if parts.len() != 2 {
-            return Err("Expected format VID:PID".to_string());
-        }
-        let vid = u16::from_str_radix(parts[0], 16).map_err(|e| e.to_string())?;
-        let pid = u16::from_str_radix(parts[1], 16).map_err(|e| e.to_string())?;
-        Ok(UsbId { vid, pid })
-    }
-}
-
-impl<'de> Deserialize<'de> for UsbId {
-    fn deserialize<D>(deserializer: D) -> Result<UsbId, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct UsbIdVisitor;
-
-        impl<'de> Visitor<'de> for UsbIdVisitor {
-            type Value = UsbId;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a string in the format VID:PID")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<UsbId, E>
-            where
-                E: de::Error,
-            {
-                UsbId::from_str(value).map_err(de::Error::custom)
-            }
-        }
-
-        deserializer.deserialize_str(UsbIdVisitor)
-    }
-}
 
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
@@ -110,103 +54,6 @@ struct Args {
         default_value = "/etc/aa-proxy-rs/config.toml"
     )]
     config: PathBuf,
-}
-
-pub fn empty_string_as_none<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    T: FromStr,
-    T::Err: Display,
-    D: Deserializer<'de>,
-{
-    let s: String = Deserialize::deserialize(deserializer)?;
-    if s.trim().is_empty() {
-        Ok(None)
-    } else {
-        T::from_str(&s).map(Some).map_err(DeError::custom)
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
-pub struct AppConfig {
-    advertise: bool,
-    debug: bool,
-    hexdump_level: HexdumpLevel,
-    disable_console_debug: bool,
-    legacy: bool,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    connect: Option<Address>,
-    logfile: PathBuf,
-    stats_interval: u16,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    udc: Option<String>,
-    iface: String,
-    hostapd_conf: PathBuf,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    btalias: Option<String>,
-    keepalive: bool,
-    timeout_secs: u16,
-    bt_timeout_secs: u16,
-    mitm: bool,
-    dpi: u16,
-    remove_tap_restriction: bool,
-    video_in_motion: bool,
-    disable_media_sink: bool,
-    disable_tts_sink: bool,
-    developer_mode: bool,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    wired: Option<UsbId>,
-    dhu: bool,
-    ev: bool,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    ev_battery_logger: Option<PathBuf>,
-    ev_battery_capacity: u64,
-    ev_factor: f32,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            advertise: false,
-            debug: false,
-            hexdump_level: HexdumpLevel::Disabled,
-            disable_console_debug: false,
-            legacy: true,
-            connect: None,
-            logfile: "/var/log/aa-proxy-rs.log".into(),
-            stats_interval: 0,
-            udc: None,
-            iface: "wlan0".to_string(),
-            hostapd_conf: "/var/run/hostapd.conf".into(),
-            btalias: None,
-            keepalive: false,
-            timeout_secs: 10,
-            bt_timeout_secs: 120,
-            mitm: false,
-            dpi: 0,
-            remove_tap_restriction: false,
-            video_in_motion: false,
-            disable_media_sink: false,
-            disable_tts_sink: false,
-            developer_mode: false,
-            wired: None,
-            dhu: false,
-            ev: false,
-            ev_battery_logger: None,
-            ev_battery_capacity: 22000,
-            ev_factor: 0.075,
-        }
-    }
-}
-
-fn load_config(config_file: PathBuf) -> Result<AppConfig, Box<dyn std::error::Error>> {
-    let file_config: AppConfig = config::Config::builder()
-        .add_source(config::File::from(config_file).required(false))
-        .build()?
-        .try_deserialize()
-        .unwrap_or_default();
-
-    Ok(file_config)
 }
 
 #[derive(Clone)]
@@ -309,9 +156,28 @@ fn logging_init(debug: bool, disable_console_debug: bool, log_path: &PathBuf) {
     }
 }
 
-async fn tokio_main(config: AppConfig, need_restart: Arc<Notify>, tcp_start: Arc<Notify>) {
+async fn tokio_main(
+    config: AppConfig,
+    need_restart: Arc<Notify>,
+    tcp_start: Arc<Notify>,
+    config_file: PathBuf,
+) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
+
+    // preparing AppState and starting webserver
+    let state = web::AppState {
+        config: Arc::new(Mutex::new(config.clone())),
+        config_file: config_file.into(),
+    };
+    let app = web::app(state.into());
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], 80));
+    info!("Server running at http://{addr}/");
+    hyper::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
 
     let wifi_conf = {
         if !config.wired.is_some() {
@@ -392,7 +258,7 @@ fn main() {
     let args = Args::parse();
 
     // parse config
-    let config = load_config(args.config.clone()).unwrap();
+    let config = AppConfig::load(args.config.clone()).unwrap();
 
     logging_init(config.debug, config.disable_console_debug, &config.logfile);
     info!(
@@ -469,7 +335,9 @@ fn main() {
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    runtime.spawn(async move { tokio_main(config, need_restart, tcp_start).await });
+    runtime.spawn(
+        async move { tokio_main(config, need_restart, tcp_start, args.config.clone()).await },
+    );
 
     // start tokio_uring runtime simultaneously
     let _ = tokio_uring::start(io_loop(
