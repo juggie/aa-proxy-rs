@@ -8,6 +8,9 @@ use axum::{
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+const TEMPLATE: &str = include_str!("../static/index.html");
+const PICO_CSS: &str = include_str!("../static/pico.min.css");
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Mutex<AppConfig>>,
@@ -22,7 +25,12 @@ pub fn app(state: Arc<AppState>) -> Router {
 }
 
 async fn index() -> impl IntoResponse {
-    Html(include_str!("../static/index.html"))
+    let html = TEMPLATE
+        .replace("{BUILD_DATE}", env!("BUILD_DATE"))
+        .replace("{GIT_DATE}", env!("GIT_DATE"))
+        .replace("{GIT_HASH}", env!("GIT_HASH"))
+        .replace("{PICO_CSS}", PICO_CSS);
+    Html(html)
 }
 
 async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
