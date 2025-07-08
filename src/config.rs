@@ -1,11 +1,16 @@
 use bluer::Address;
 use serde::de::{self, Deserializer, Error as DeError, Visitor};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use simplelog::*;
 use std::fmt::{self, Display};
+use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
+use toml_edit::{value, DocumentMut};
 
-#[derive(clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy, Deserialize)]
+#[derive(
+    clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy, Deserialize, Serialize,
+)]
 pub enum HexdumpLevel {
     #[default]
     Disabled,
@@ -16,7 +21,7 @@ pub enum HexdumpLevel {
     All,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct UsbId {
     pub vid: u16,
     pub pid: u16,
@@ -33,6 +38,12 @@ impl std::str::FromStr for UsbId {
         let vid = u16::from_str_radix(parts[0], 16).map_err(|e| e.to_string())?;
         let pid = u16::from_str_radix(parts[1], 16).map_err(|e| e.to_string())?;
         Ok(UsbId { vid, pid })
+    }
+}
+
+impl fmt::Display for UsbId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:x}:{:x}", self.vid, self.pid)
     }
 }
 
@@ -76,7 +87,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AppConfig {
     pub advertise: bool,
@@ -149,12 +160,68 @@ impl Default for AppConfig {
     }
 }
 
-pub fn load_config(config_file: PathBuf) -> Result<AppConfig, Box<dyn std::error::Error>> {
-    let file_config: AppConfig = config::Config::builder()
-        .add_source(config::File::from(config_file).required(false))
-        .build()?
-        .try_deserialize()
-        .unwrap_or_default();
+impl AppConfig {
+    pub fn load(config_file: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+        use ::config::File;
+        let file_config: AppConfig = ::config::Config::builder()
+            .add_source(File::from(config_file).required(false))
+            .build()?
+            .try_deserialize()
+            .unwrap_or_default();
 
-    Ok(file_config)
+        Ok(file_config)
+    }
+
+    pub fn save(&self, config_file: PathBuf) {
+        debug!("Saving config: {:?}", self);
+        let raw = fs::read_to_string(&config_file).unwrap_or_default();
+        let mut doc = raw.parse::<DocumentMut>().unwrap_or_else(|_| {
+            // if the file doesn't exists or there is parse error, create a new one
+            DocumentMut::new()
+        });
+
+        doc["advertise"] = value(self.advertise);
+        doc["debug"] = value(self.debug);
+        doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
+        doc["disable_console_debug"] = value(self.disable_console_debug);
+        doc["legacy"] = value(self.legacy);
+        doc["connect"] = match &self.connect {
+            Some(c) => value(c.to_string()),
+            None => value(""),
+        };
+        doc["logfile"] = value(self.logfile.display().to_string());
+        doc["stats_interval"] = value(self.stats_interval as i64);
+        if let Some(udc) = &self.udc {
+            doc["udc"] = value(udc);
+        }
+        doc["iface"] = value(&self.iface);
+        doc["hostapd_conf"] = value(self.hostapd_conf.display().to_string());
+        if let Some(alias) = &self.btalias {
+            doc["btalias"] = value(alias);
+        }
+        doc["keepalive"] = value(self.keepalive);
+        doc["timeout_secs"] = value(self.timeout_secs as i64);
+        doc["bt_timeout_secs"] = value(self.bt_timeout_secs as i64);
+        doc["mitm"] = value(self.mitm);
+        doc["dpi"] = value(self.dpi as i64);
+        doc["remove_tap_restriction"] = value(self.remove_tap_restriction);
+        doc["video_in_motion"] = value(self.video_in_motion);
+        doc["disable_media_sink"] = value(self.disable_media_sink);
+        doc["disable_tts_sink"] = value(self.disable_tts_sink);
+        doc["developer_mode"] = value(self.developer_mode);
+        doc["wired"] = value(
+            self.wired
+                .as_ref()
+                .map_or("".to_string(), |w| w.to_string()),
+        );
+        doc["dhu"] = value(self.dhu);
+        doc["ev"] = value(self.ev);
+        if let Some(path) = &self.ev_battery_logger {
+            doc["ev_battery_logger"] = value(path.display().to_string());
+        }
+        doc["ev_battery_capacity"] = value(self.ev_battery_capacity as i64);
+        doc["ev_factor"] = value(self.ev_factor as f64);
+
+        let _ = fs::write(config_file, doc.to_string());
+    }
 }

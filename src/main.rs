@@ -6,6 +6,7 @@ mod io_uring;
 mod mitm;
 mod usb_gadget;
 mod usb_stream;
+mod web;
 
 use crate::config::AppConfig;
 use bluetooth::bluetooth_setup_connection;
@@ -25,6 +26,9 @@ use std::time::Duration;
 use tokio::runtime::Builder;
 use tokio::sync::Notify;
 use tokio::time::Instant;
+
+use std::net::SocketAddr;
+use std::sync::Mutex;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> main: </>";
@@ -152,9 +156,28 @@ fn logging_init(debug: bool, disable_console_debug: bool, log_path: &PathBuf) {
     }
 }
 
-async fn tokio_main(config: AppConfig, need_restart: Arc<Notify>, tcp_start: Arc<Notify>) {
+async fn tokio_main(
+    config: AppConfig,
+    need_restart: Arc<Notify>,
+    tcp_start: Arc<Notify>,
+    config_file: PathBuf,
+) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
+
+    // preparing AppState and starting webserver
+    let state = web::AppState {
+        config: Arc::new(Mutex::new(config.clone())),
+        config_file: config_file.into(),
+    };
+    let app = web::app(state.into());
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], 80));
+    info!("Server running at http://{addr}/");
+    hyper::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
 
     let wifi_conf = {
         if !config.wired.is_some() {
@@ -235,7 +258,7 @@ fn main() {
     let args = Args::parse();
 
     // parse config
-    let config = config::load_config(args.config.clone()).unwrap();
+    let config = AppConfig::load(args.config.clone()).unwrap();
 
     logging_init(config.debug, config.disable_console_debug, &config.logfile);
     info!(
@@ -312,7 +335,9 @@ fn main() {
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    runtime.spawn(async move { tokio_main(config, need_restart, tcp_start).await });
+    runtime.spawn(
+        async move { tokio_main(config, need_restart, tcp_start, args.config.clone()).await },
+    );
 
     // start tokio_uring runtime simultaneously
     let _ = tokio_uring::start(io_loop(
