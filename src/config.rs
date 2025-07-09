@@ -87,6 +87,10 @@ where
     }
 }
 
+fn webserver_default_bind() -> Option<String> {
+    Some("0.0.0.0:80".into())
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AppConfig {
@@ -107,7 +111,10 @@ pub struct AppConfig {
     pub btalias: Option<String>,
     pub keepalive: bool,
     pub timeout_secs: u16,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default = "webserver_default_bind",
+        deserialize_with = "empty_string_as_none"
+    )]
     pub webserver: Option<String>,
     pub bt_timeout_secs: u16,
     pub mitm: bool,
@@ -144,7 +151,7 @@ impl Default for AppConfig {
             btalias: None,
             keepalive: false,
             timeout_secs: 10,
-            webserver: Some("0.0.0.0:80".into()),
+            webserver: webserver_default_bind(),
             bt_timeout_secs: 120,
             mitm: false,
             dpi: 0,
