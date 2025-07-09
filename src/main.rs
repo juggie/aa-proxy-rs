@@ -175,11 +175,16 @@ async fn tokio_main(
 
         match bindaddr.parse::<SocketAddr>() {
             Ok(addr) => {
+                let server = hyper::Server::bind(&addr).serve(app.into_make_service());
+
+                // run webserver in separate task
+                tokio::spawn(async move {
+                    if let Err(e) = server.await {
+                        error!("{} webserver starting error: {}", NAME, e);
+                    }
+                });
+
                 info!("{} webserver running at http://{addr}/", NAME);
-                hyper::Server::bind(&addr)
-                    .serve(app.into_make_service())
-                    .await
-                    .unwrap();
             }
             Err(e) => {
                 error!("{} webserver address/port parse: {}", NAME, e);
