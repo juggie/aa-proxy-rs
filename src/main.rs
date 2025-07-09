@@ -165,19 +165,27 @@ async fn tokio_main(
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
-    // preparing AppState and starting webserver
-    let state = web::AppState {
-        config: Arc::new(Mutex::new(config.clone())),
-        config_file: config_file.into(),
-    };
-    let app = web::app(state.into());
+    if let Some(ref bindaddr) = config.webserver {
+        // preparing AppState and starting webserver
+        let state = web::AppState {
+            config: Arc::new(Mutex::new(config.clone())),
+            config_file: config_file.into(),
+        };
+        let app = web::app(state.into());
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 80));
-    info!("Server running at http://{addr}/");
-    hyper::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+        match bindaddr.parse::<SocketAddr>() {
+            Ok(addr) => {
+                info!("{} webserver running at http://{addr}/", NAME);
+                hyper::Server::bind(&addr)
+                    .serve(app.into_make_service())
+                    .await
+                    .unwrap();
+            }
+            Err(e) => {
+                error!("{} webserver address/port parse: {}", NAME, e);
+            }
+        }
+    }
 
     let wifi_conf = {
         if !config.wired.is_some() {
