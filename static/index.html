@@ -52,6 +52,14 @@
           </td>
         </tr>
         <tr>
+          <td><label for="webserver">webserver</label></td>
+          <td>
+            <input type="text" id="webserver" /><br /><small>
+	      Webserver bind address/port, empty = disabled</small
+            >
+          </td>
+        </tr>
+        <tr>
           <td><label for="legacy">legacy</label></td>
           <td>
             <input type="checkbox" role="switch" id="legacy" /><br /><small
@@ -344,6 +352,7 @@
           "hostapd_conf",
           "btalias",
           "keepalive",
+          "webserver",
           "timeout_secs",
           "bt_timeout_secs",
           "mitm",

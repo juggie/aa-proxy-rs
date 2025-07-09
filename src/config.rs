@@ -107,6 +107,8 @@ pub struct AppConfig {
     pub btalias: Option<String>,
     pub keepalive: bool,
     pub timeout_secs: u16,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub webserver: Option<String>,
     pub bt_timeout_secs: u16,
     pub mitm: bool,
     pub dpi: u16,
@@ -142,6 +144,7 @@ impl Default for AppConfig {
             btalias: None,
             keepalive: false,
             timeout_secs: 10,
+            webserver: Some("0.0.0.0:80".into()),
             bt_timeout_secs: 120,
             mitm: false,
             dpi: 0,
@@ -201,6 +204,9 @@ impl AppConfig {
         }
         doc["keepalive"] = value(self.keepalive);
         doc["timeout_secs"] = value(self.timeout_secs as i64);
+        if let Some(webserver) = &self.webserver {
+            doc["webserver"] = value(webserver);
+        }
         doc["bt_timeout_secs"] = value(self.bt_timeout_secs as i64);
         doc["mitm"] = value(self.mitm);
         doc["dpi"] = value(self.dpi as i64);

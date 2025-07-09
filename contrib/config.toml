@@ -9,6 +9,9 @@
   # Data transfer timeout [seconds], after this idle time the session will be reconnected
   timeout_secs = 10
 
+  # Webserver bind address/port, empty = disabled
+  webserver = "0.0.0.0:80"
+
   # Enable legacy USB mode (some HeadUnits/cars needs this enabled for compatibility)
   legacy = true
 
