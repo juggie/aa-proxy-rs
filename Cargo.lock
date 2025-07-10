@@ -10,6 +10,7 @@ dependencies = [
  "bluer",
  "byteorder",
  "bytesize",
+ "chrono",
  "clap",
  "config",
  "dbus",
