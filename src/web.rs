@@ -1,13 +1,14 @@
 use crate::config::AppConfig;
 use axum::{
     body::Body,
-    extract::State,
+    extract::{Query, State},
     http::{header, Response, StatusCode},
     response::{Html, IntoResponse},
     routing::get,
     Json, Router,
 };
 use chrono::Local;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::fs;
@@ -43,9 +44,16 @@ fn generate_filename() -> String {
     now.format("%Y%m%d%H%M%S_aa-proxy-rs.log").to_string()
 }
 
-async fn download_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn download_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
     let file_path = state.config.lock().unwrap().logfile.clone();
-    let filename = generate_filename();
+    // if we have filename parameter, use it; default otherwise
+    let filename = params
+        .get("filename")
+        .cloned()
+        .unwrap_or_else(generate_filename);
 
     match fs::read(file_path).await {
         Ok(content) => Response::builder()

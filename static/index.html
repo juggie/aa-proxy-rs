@@ -23,9 +23,7 @@
         </tr>
         <tr>
           <td colspan="2">
-            <button type="button" onclick="window.location.href='/download'">
-              📥 Download log
-            </button>
+            <button type="button" id="downloadBtn">📥 Download log</button>
           </td>
         </tr>
         <tr>
@@ -67,7 +65,7 @@
           <td><label for="webserver">webserver</label></td>
           <td>
             <input type="text" id="webserver" /><br /><small>
-	      Webserver bind address/port, empty = disabled</small
+              Webserver bind address/port, empty = disabled</small
             >
           </td>
         </tr>
@@ -307,6 +305,20 @@
     </form>
 
     <script>
+      // button event listener
+      document.getElementById("downloadBtn").addEventListener("click", () => {
+        const now = new Date();
+        const filename =
+          `${now.getFullYear()}` +
+          `${String(now.getMonth() + 1).padStart(2, "0")}` +
+          `${String(now.getDate()).padStart(2, "0")}` +
+          `${String(now.getHours()).padStart(2, "0")}` +
+          `${String(now.getMinutes()).padStart(2, "0")}` +
+          `${String(now.getSeconds()).padStart(2, "0")}` +
+          `_aa-proxy-rs.log`;
+        window.location.href = `/download?filename=${encodeURIComponent(filename)}`;
+      });
+
       function setValue(id, value) {
         const el = document.getElementById(id);
         if (!el) return;
