@@ -1,12 +1,16 @@
 use crate::config::AppConfig;
 use axum::{
+    body::Body,
     extract::State,
+    http::{header, Response, StatusCode},
     response::{Html, IntoResponse},
     routing::get,
     Json, Router,
 };
+use chrono::Local;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tokio::fs;
 
 const TEMPLATE: &str = include_str!("../static/index.html");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
@@ -21,6 +25,7 @@ pub fn app(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/config", get(get_config).post(set_config))
+        .route("/download", get(download_handler))
         .with_state(state)
 }
 
@@ -31,6 +36,32 @@ async fn index() -> impl IntoResponse {
         .replace("{GIT_HASH}", env!("GIT_HASH"))
         .replace("{PICO_CSS}", PICO_CSS);
     Html(html)
+}
+
+fn generate_filename() -> String {
+    let now = Local::now();
+    now.format("%Y%m%d%H%M%S_aa-proxy-rs.log").to_string()
+}
+
+async fn download_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let file_path = state.config.lock().unwrap().logfile.clone();
+    let filename = generate_filename();
+
+    match fs::read(file_path).await {
+        Ok(content) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/octet-stream")
+            .header(
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", filename),
+            )
+            .body(Body::from(content))
+            .unwrap(),
+        Err(_) => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("Cannot access log file"))
+            .unwrap(),
+    }
 }
 
 async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
