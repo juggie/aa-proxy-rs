@@ -142,6 +142,9 @@ pub struct AppConfig {
     pub ev_battery_logger: Option<PathBuf>,
     pub ev_battery_capacity: u64,
     pub ev_factor: f32,
+
+    #[serde(skip)]
+    pub restart_requested: bool,
 }
 
 impl Default for AppConfig {
@@ -176,6 +179,7 @@ impl Default for AppConfig {
             ev_battery_logger: None,
             ev_battery_capacity: 22000,
             ev_factor: 0.075,
+            restart_requested: false,
         }
     }
 }

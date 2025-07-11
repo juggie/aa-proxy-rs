@@ -87,6 +87,7 @@ async fn transfer_monitor(
     usb_bytes_written: Arc<AtomicUsize>,
     tcp_bytes_written: Arc<AtomicUsize>,
     read_timeout: Duration,
+    config: SharedConfig,
 ) -> Result<()> {
     let mut usb_bytes_out_last: usize = 0;
     let mut tcp_bytes_out_last: usize = 0;
@@ -151,6 +152,12 @@ async fn transfer_monitor(
             stall_check = Instant::now();
             stall_usb_bytes_last = usb_bytes_out;
             stall_tcp_bytes_last = tcp_bytes_out;
+        }
+
+        // check if we need to restart
+        if config.read().await.restart_requested {
+            config.write().await.restart_requested = false;
+            return Err("config reload request => restarting connection".into());
         }
 
         sleep(Duration::from_millis(100)).await;
@@ -384,6 +391,7 @@ pub async fn io_loop(
             file_bytes,
             stream_bytes,
             read_timeout,
+            config.clone(),
         ));
 
         // Stop as soon as one of them errors
