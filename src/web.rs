@@ -28,6 +28,7 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/", get(index))
         .route("/config", get(get_config).post(set_config))
         .route("/download", get(download_handler))
+        .route("/restart", get(restart_handler))
         .with_state(state)
 }
 
@@ -43,6 +44,15 @@ async fn index() -> impl IntoResponse {
 fn generate_filename() -> String {
     let now = Local::now();
     now.format("%Y%m%d%H%M%S_aa-proxy-rs.log").to_string()
+}
+
+async fn restart_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    state.config.write().await.restart_requested = true;
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from("Restart has been requested"))
+        .unwrap()
 }
 
 async fn download_handler(
