@@ -1,4 +1,5 @@
 use crate::config::AppConfig;
+use crate::config::SharedConfig;
 use axum::{
     body::Body,
     extract::{Query, State},
@@ -10,7 +11,7 @@ use axum::{
 use chrono::Local;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::fs;
 
 const TEMPLATE: &str = include_str!("../static/index.html");
@@ -18,7 +19,7 @@ const PICO_CSS: &str = include_str!("../static/pico.min.css");
 
 #[derive(Clone)]
 pub struct AppState {
-    pub config: Arc<Mutex<AppConfig>>,
+    pub config: SharedConfig,
     pub config_file: Arc<PathBuf>,
 }
 
@@ -48,7 +49,7 @@ async fn download_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let file_path = state.config.lock().unwrap().logfile.clone();
+    let file_path = state.config.read().await.logfile.clone();
     // if we have filename parameter, use it; default otherwise
     let filename = params
         .get("filename")
@@ -73,7 +74,7 @@ async fn download_handler(
 }
 
 async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let cfg = state.config.lock().unwrap().clone();
+    let cfg = state.config.read().await.clone();
     Json(cfg)
 }
 
@@ -82,7 +83,7 @@ async fn set_config(
     Json(new_cfg): Json<AppConfig>,
 ) -> impl IntoResponse {
     {
-        let mut cfg = state.config.lock().unwrap();
+        let mut cfg = state.config.write().await;
         *cfg = new_cfg.clone();
         cfg.save((&state.config_file).to_path_buf());
     }

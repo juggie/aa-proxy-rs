@@ -8,11 +8,15 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     str::FromStr,
+    sync::Arc,
 };
+use tokio::sync::RwLock;
 use toml_edit::{value, DocumentMut};
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> config: </>";
+
+pub type SharedConfig = Arc<RwLock<AppConfig>>;
 
 #[derive(
     clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy, Deserialize, Serialize,

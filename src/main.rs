@@ -28,7 +28,7 @@ use tokio::sync::Notify;
 use tokio::time::Instant;
 
 use std::net::SocketAddr;
-use std::sync::Mutex;
+use tokio::sync::RwLock;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> main: </>";
@@ -168,7 +168,7 @@ async fn tokio_main(
     if let Some(ref bindaddr) = config.webserver {
         // preparing AppState and starting webserver
         let state = web::AppState {
-            config: Arc::new(Mutex::new(config.clone())),
+            config: Arc::new(RwLock::new(config.clone())),
             config_file: config_file.into(),
         };
         let app = web::app(state.into());
