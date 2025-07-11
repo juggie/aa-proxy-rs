@@ -28,6 +28,7 @@ use protobuf::{Enum, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
 use crate::config::HexdumpLevel;
+use crate::config::SharedConfig;
 use crate::ev::RestContext;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
@@ -650,18 +651,21 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     tx: Sender<Packet>,
     mut rx: Receiver<Packet>,
     mut rxr: Receiver<Packet>,
-    dpi: u16,
-    developer_mode: bool,
-    disable_media_sink: bool,
-    disable_tts_sink: bool,
-    remove_tap_restriction: bool,
-    video_in_motion: bool,
-    passthrough: bool,
-    hex_requested: HexdumpLevel,
-    ev: bool,
+    config: SharedConfig,
     rest_ctx: Option<Arc<tokio::sync::Mutex<RestContext>>>,
-    ev_battery_logger: Option<PathBuf>,
 ) -> Result<()> {
+    // load needed config options to local variables
+    let passthrough = !config.read().await.mitm;
+    let hex_requested = config.read().await.hexdump_level;
+    let dpi = config.read().await.dpi;
+    let developer_mode = config.read().await.developer_mode;
+    let disable_media_sink = config.read().await.disable_media_sink;
+    let disable_tts_sink = config.read().await.disable_tts_sink;
+    let remove_tap_restriction = config.read().await.remove_tap_restriction;
+    let video_in_motion = config.read().await.video_in_motion;
+    let ev = config.read().await.ev;
+    let ev_battery_logger = &config.read().await.ev_battery_logger;
+
     // in full_frames/passthrough mode we only directly pass packets from one endpoint to the other
     if passthrough {
         loop {

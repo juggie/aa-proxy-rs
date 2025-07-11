@@ -3,7 +3,6 @@ use humantime::format_duration;
 use simplelog::*;
 use std::cell::RefCell;
 use std::marker::PhantomData;
-use std::path::PathBuf;
 use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -33,8 +32,7 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::HexdumpLevel;
-use crate::config::UsbId;
+use crate::config::SharedConfig;
 use crate::ev::{rest_server, RestContext};
 use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
@@ -197,31 +195,18 @@ pub async fn io_loop(
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
     read_timeout: Duration,
-    mitm: bool,
-    dpi: u16,
-    developer_mode: bool,
-    disable_media_sink: bool,
-    disable_tts_sink: bool,
-    remove_tap_restriction: bool,
-    video_in_motion: bool,
-    hex_requested: HexdumpLevel,
-    wired: Option<UsbId>,
-    dhu: bool,
-    ev: bool,
-    ev_battery_logger: Option<PathBuf>,
-    ev_battery_capacity: u64,
-    ev_factor: f32,
+    config: SharedConfig,
 ) -> Result<()> {
     // prepare/bind needed TCP listeners
     let mut dhu_listener = None;
     let mut md_listener = None;
-    if !wired.is_some() {
+    if !config.read().await.wired.is_some() {
         info!("{} 🛰️ Starting TCP server for MD...", NAME);
         let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
         md_listener = Some(TcpListener::bind(bind_addr).unwrap());
         info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);
     }
-    if dhu {
+    if config.read().await.dhu {
         info!("{} 🛰️ Starting TCP server for DHU...", NAME);
         let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
         dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
@@ -233,12 +218,12 @@ pub async fn io_loop(
         let mut md_usb = None;
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        if wired.is_some() {
+        if config.read().await.wired.is_some() {
             info!(
                 "{} 💤 trying to enable Android Auto mode on USB port...",
                 NAME
             );
-            match usb_stream::new(wired.clone()).await {
+            match usb_stream::new(config.read().await.wired.clone()).await {
                 Err(e) => {
                     error!("{} 🔴 Enabling Android Auto: {}", NAME, e);
                     // notify main loop to restart
@@ -266,7 +251,7 @@ pub async fn io_loop(
             }
         }
 
-        if dhu {
+        if config.read().await.dhu {
             info!(
                 "{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",
                 NAME
@@ -355,11 +340,11 @@ pub async fn io_loop(
         // handling battery in JSON
         let mut rest_server_handle = None;
         let mut rest_ctx = None;
-        if mitm && ev {
+        if config.read().await.mitm && config.read().await.ev {
             let ctx = RestContext {
                 sensor_channel: None,
-                ev_battery_capacity,
-                ev_factor,
+                ev_battery_capacity: config.read().await.ev_battery_capacity,
+                ev_factor: config.read().await.ev_factor,
             };
             let ctx = Arc::new(Mutex::new(ctx));
 
@@ -379,17 +364,8 @@ pub async fn io_loop(
             tx_hu.clone(),
             rx_hu,
             rxr_md,
-            dpi,
-            developer_mode,
-            disable_media_sink,
-            disable_tts_sink,
-            remove_tap_restriction,
-            video_in_motion,
-            !mitm,
-            hex_requested,
-            ev,
+            config.clone(),
             rest_ctx.clone(),
-            ev_battery_logger.clone(),
         ));
         from_stream = tokio_uring::spawn(proxy(
             ProxyType::MobileDevice,
@@ -398,17 +374,8 @@ pub async fn io_loop(
             tx_md,
             rx_md,
             rxr_hu,
-            dpi,
-            developer_mode,
-            disable_media_sink,
-            disable_tts_sink,
-            remove_tap_restriction,
-            video_in_motion,
-            !mitm,
-            hex_requested,
-            ev,
+            config.clone(),
             rest_ctx.clone(),
-            ev_battery_logger.clone(),
         ));
 
         // Thread for monitoring transfer
@@ -446,7 +413,7 @@ pub async fn io_loop(
             handle.abort();
         }
         // stop EV battery logger if neded
-        if let Some(ref path) = ev_battery_logger {
+        if let Some(ref path) = config.read().await.ev_battery_logger {
             let _ = Command::new(path).arg("stop").spawn();
         }
 

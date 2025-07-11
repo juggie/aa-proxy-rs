@@ -9,6 +9,7 @@ mod usb_stream;
 mod web;
 
 use crate::config::AppConfig;
+use crate::config::SharedConfig;
 use bluetooth::bluetooth_setup_connection;
 use bluetooth::bluetooth_stop;
 use clap::Parser;
@@ -157,7 +158,7 @@ fn logging_init(debug: bool, disable_console_debug: bool, log_path: &PathBuf) {
 }
 
 async fn tokio_main(
-    config: AppConfig,
+    config: SharedConfig,
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
     config_file: PathBuf,
@@ -165,10 +166,10 @@ async fn tokio_main(
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
-    if let Some(ref bindaddr) = config.webserver {
+    if let Some(ref bindaddr) = config.read().await.webserver {
         // preparing AppState and starting webserver
         let state = web::AppState {
-            config: Arc::new(RwLock::new(config.clone())),
+            config: config.clone(),
             config_file: config_file.into(),
         };
         let app = web::app(state.into());
@@ -193,19 +194,25 @@ async fn tokio_main(
     }
 
     let wifi_conf = {
-        if !config.wired.is_some() {
-            Some(init_wifi_config(&config.iface, config.hostapd_conf))
+        if !config.read().await.wired.is_some() {
+            Some(init_wifi_config(
+                &config.read().await.iface,
+                config.read().await.hostapd_conf.clone(),
+            ))
         } else {
             None
         }
     };
     let mut usb = None;
-    if !config.dhu {
-        if config.legacy {
+    if !config.read().await.dhu {
+        if config.read().await.legacy {
             // start uevent listener in own task
             std::thread::spawn(|| uevent_listener(accessory_started_cloned));
         }
-        usb = Some(UsbGadgetState::new(config.legacy, config.udc));
+        usb = Some(UsbGadgetState::new(
+            config.read().await.legacy,
+            config.read().await.udc.clone(),
+        ));
     }
     loop {
         if let Some(ref mut usb) = usb {
@@ -218,13 +225,13 @@ async fn tokio_main(
         if let Some(ref wifi_conf) = wifi_conf {
             loop {
                 match bluetooth_setup_connection(
-                    config.advertise,
-                    config.btalias.clone(),
-                    config.connect,
+                    config.read().await.advertise,
+                    config.read().await.btalias.clone(),
+                    config.read().await.connect,
                     wifi_conf.clone(),
                     tcp_start.clone(),
-                    config.keepalive,
-                    Duration::from_secs(config.bt_timeout_secs.into()),
+                    config.read().await.keepalive,
+                    Duration::from_secs(config.read().await.bt_timeout_secs.into()),
                 )
                 .await
                 {
@@ -331,26 +338,14 @@ fn main() {
     let need_restart_cloned = need_restart.clone();
     let tcp_start = Arc::new(Notify::new());
     let tcp_start_cloned = tcp_start.clone();
-    let mitm = config.mitm;
-    let dpi = config.dpi;
-    let developer_mode = config.developer_mode;
-    let disable_media_sink = config.disable_media_sink;
-    let disable_tts_sink = config.disable_tts_sink;
-    let remove_tap_restriction = config.remove_tap_restriction;
-    let video_in_motion = config.video_in_motion;
-    let hex_requested = config.hexdump_level;
-    let wired = config.wired.clone();
-    let dhu = config.dhu;
-    let ev = config.ev;
-    let ev_battery_logger = config.ev_battery_logger.clone();
-    let ev_battery_capacity = config.ev_battery_capacity.clone();
-    let ev_factor = config.ev_factor.clone();
+    let config = Arc::new(RwLock::new(config));
+    let config_cloned = config.clone();
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    runtime.spawn(
-        async move { tokio_main(config, need_restart, tcp_start, args.config.clone()).await },
-    );
+    runtime.spawn(async move {
+        tokio_main(config_cloned, need_restart, tcp_start, args.config.clone()).await
+    });
 
     // start tokio_uring runtime simultaneously
     let _ = tokio_uring::start(io_loop(
@@ -358,20 +353,7 @@ fn main() {
         need_restart_cloned,
         tcp_start_cloned,
         read_timeout,
-        mitm,
-        dpi,
-        developer_mode,
-        disable_media_sink,
-        disable_tts_sink,
-        remove_tap_restriction,
-        video_in_motion,
-        hex_requested,
-        wired,
-        dhu,
-        ev,
-        ev_battery_logger,
-        ev_battery_capacity,
-        ev_factor,
+        config,
     ));
 
     info!(
