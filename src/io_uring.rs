@@ -207,13 +207,15 @@ pub async fn io_loop(
     // prepare/bind needed TCP listeners
     let mut dhu_listener = None;
     let mut md_listener = None;
-    if !config.read().await.wired.is_some() {
+    let shared_config = config.clone();
+    let config = config.read().await.clone();
+    if !config.wired.is_some() {
         info!("{} 🛰️ Starting TCP server for MD...", NAME);
         let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
         md_listener = Some(TcpListener::bind(bind_addr).unwrap());
         info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);
     }
-    if config.read().await.dhu {
+    if config.dhu {
         info!("{} 🛰️ Starting TCP server for DHU...", NAME);
         let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
         dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
@@ -225,12 +227,12 @@ pub async fn io_loop(
         let mut md_usb = None;
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        if config.read().await.wired.is_some() {
+        if config.wired.is_some() {
             info!(
                 "{} 💤 trying to enable Android Auto mode on USB port...",
                 NAME
             );
-            match usb_stream::new(config.read().await.wired.clone()).await {
+            match usb_stream::new(config.wired.clone()).await {
                 Err(e) => {
                     error!("{} 🔴 Enabling Android Auto: {}", NAME, e);
                     // notify main loop to restart
@@ -258,7 +260,7 @@ pub async fn io_loop(
             }
         }
 
-        if config.read().await.dhu {
+        if config.dhu {
             info!(
                 "{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",
                 NAME
@@ -347,11 +349,11 @@ pub async fn io_loop(
         // handling battery in JSON
         let mut rest_server_handle = None;
         let mut rest_ctx = None;
-        if config.read().await.mitm && config.read().await.ev {
+        if config.mitm && config.ev {
             let ctx = RestContext {
                 sensor_channel: None,
-                ev_battery_capacity: config.read().await.ev_battery_capacity,
-                ev_factor: config.read().await.ev_factor,
+                ev_battery_capacity: config.ev_battery_capacity,
+                ev_factor: config.ev_factor,
             };
             let ctx = Arc::new(Mutex::new(ctx));
 
@@ -391,7 +393,7 @@ pub async fn io_loop(
             file_bytes,
             stream_bytes,
             read_timeout,
-            config.clone(),
+            shared_config.clone(),
         ));
 
         // Stop as soon as one of them errors
@@ -421,7 +423,7 @@ pub async fn io_loop(
             handle.abort();
         }
         // stop EV battery logger if neded
-        if let Some(ref path) = config.read().await.ev_battery_logger {
+        if let Some(ref path) = config.ev_battery_logger {
             let _ = Command::new(path).arg("stop").spawn();
         }
 
