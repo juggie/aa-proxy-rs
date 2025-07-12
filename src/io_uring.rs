@@ -208,21 +208,24 @@ pub async fn io_loop(
     let mut dhu_listener = None;
     let mut md_listener = None;
     let shared_config = config.clone();
-    let config = config.read().await.clone();
-    if !config.wired.is_some() {
-        info!("{} 🛰️ Starting TCP server for MD...", NAME);
-        let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
-        md_listener = Some(TcpListener::bind(bind_addr).unwrap());
-        info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);
-    }
-    if config.dhu {
-        info!("{} 🛰️ Starting TCP server for DHU...", NAME);
-        let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
-        dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
-        info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
-    }
 
     loop {
+        // reload new config
+        let config = config.read().await.clone();
+
+        if !config.wired.is_some() && md_listener.is_none() {
+            info!("{} 🛰️ Starting TCP server for MD...", NAME);
+            let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
+            md_listener = Some(TcpListener::bind(bind_addr).unwrap());
+            info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);
+        }
+        if config.dhu && dhu_listener.is_none() {
+            info!("{} 🛰️ Starting TCP server for DHU...", NAME);
+            let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
+            dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+            info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
+        }
+
         let mut md_tcp = None;
         let mut md_usb = None;
         let mut hu_tcp = None;
