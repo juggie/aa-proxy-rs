@@ -304,15 +304,6 @@ fn main() {
     }
     debug!("{} ⚙️ startup configuration: {:#?}", NAME, config);
 
-    let stats_interval = {
-        if config.stats_interval == 0 {
-            None
-        } else {
-            Some(Duration::from_secs(config.stats_interval.into()))
-        }
-    };
-    let read_timeout = Duration::from_secs(config.timeout_secs.into());
-
     if let Some(ref wired) = config.wired {
         info!(
             "{} 🔌 enabled wired USB connection with {:04X?}",
@@ -323,14 +314,6 @@ fn main() {
         "{} 📜 Log file path: <b><green>{}</>",
         NAME,
         config.logfile.display()
-    );
-    info!(
-        "{} ⚙️ Showing transfer statistics: <b><blue>{}</>",
-        NAME,
-        match stats_interval {
-            Some(d) => format_duration(d).to_string(),
-            None => "disabled".to_string(),
-        }
     );
 
     // notify for syncing threads
@@ -348,13 +331,7 @@ fn main() {
     });
 
     // start tokio_uring runtime simultaneously
-    let _ = tokio_uring::start(io_loop(
-        stats_interval,
-        need_restart_cloned,
-        tcp_start_cloned,
-        read_timeout,
-        config,
-    ));
+    let _ = tokio_uring::start(io_loop(need_restart_cloned, tcp_start_cloned, config));
 
     info!(
         "🚩 aa-proxy-rs terminated, running time: {}",

@@ -96,6 +96,15 @@ async fn transfer_monitor(
     let mut report_time = Instant::now();
     let mut stall_check = Instant::now();
 
+    info!(
+        "{} ⚙️ Showing transfer statistics: <b><blue>{}</>",
+        NAME,
+        match stats_interval {
+            Some(d) => format_duration(d).to_string(),
+            None => "disabled".to_string(),
+        }
+    );
+
     loop {
         // load current total transfer from AtomicUsize:
         let usb_bytes_out = usb_bytes_written.load(Ordering::Relaxed);
@@ -198,10 +207,8 @@ async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream
 }
 
 pub async fn io_loop(
-    stats_interval: Option<Duration>,
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
-    read_timeout: Duration,
     config: SharedConfig,
 ) -> Result<()> {
     // prepare/bind needed TCP listeners
@@ -212,6 +219,16 @@ pub async fn io_loop(
     loop {
         // reload new config
         let config = config.read().await.clone();
+
+        // generate Durations from configured seconds
+        let stats_interval = {
+            if config.stats_interval == 0 {
+                None
+            } else {
+                Some(Duration::from_secs(config.stats_interval.into()))
+            }
+        };
+        let read_timeout = Duration::from_secs(config.timeout_secs.into());
 
         if !config.wired.is_some() && md_listener.is_none() {
             info!("{} 🛰️ Starting TCP server for MD...", NAME);
