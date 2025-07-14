@@ -70,6 +70,7 @@ pub async fn get_cpu_serial_number_suffix() -> Result<String> {
 
 async fn power_up_and_wait_for_connection(
     advertise: bool,
+    dongle_mode: bool,
     btalias: Option<String>,
     connect: Option<Address>,
     keepalive: bool,
@@ -134,7 +135,7 @@ async fn power_up_and_wait_for_connection(
     info!("{} 📱 AA Wireless Profile: registered", NAME);
 
     let mut handle_hsp = None;
-    if true {
+    if dongle_mode {
         // Headset profile
         let profile = Profile {
             uuid: HSP_HS_UUID,
@@ -161,7 +162,7 @@ async fn power_up_and_wait_for_connection(
 
     // try to connect to saved devices or provided one via command line
     let mut connect_task: Option<JoinHandle<Result<()>>> = None;
-    if true {
+    if dongle_mode {
         if let Some(address) = connect {
             let adapter_cloned = adapter.clone();
 
@@ -369,6 +370,7 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
 
 pub async fn bluetooth_setup_connection(
     advertise: bool,
+    dongle_mode: bool,
     btalias: Option<String>,
     connect: Option<Address>,
     wifi_config: WifiConfig,
@@ -381,9 +383,15 @@ pub async fn bluetooth_setup_connection(
     let mut stage = 1;
     let mut started;
 
-    let (state, mut stream) =
-        power_up_and_wait_for_connection(advertise, btalias, connect, keepalive, bt_timeout)
-            .await?;
+    let (state, mut stream) = power_up_and_wait_for_connection(
+        advertise,
+        dongle_mode,
+        btalias,
+        connect,
+        keepalive,
+        bt_timeout,
+    )
+    .await?;
 
     info!("{} 📲 Sending parameters via bluetooth to phone...", NAME);
     let mut start_req = WifiStartRequest::new();
