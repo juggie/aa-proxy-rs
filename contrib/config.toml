@@ -40,8 +40,12 @@
   # BLE advertising
   advertise = false
 
+  # Dongle mode
+  dongle_mode = false
+
   # BLE device name (how your bluetooth device is visible)
   # by default it is WirelessAADongle-CPUSERIAL
+  # for dongle mode you need to set it to: AndroidAuto-xxxxx
   btalias = ""
 
   # Auto-connect to phone and initiate connection

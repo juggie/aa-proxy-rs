@@ -105,6 +105,7 @@ fn webserver_default_bind() -> Option<String> {
 #[serde(default)]
 pub struct AppConfig {
     pub advertise: bool,
+    pub dongle_mode: bool,
     pub debug: bool,
     pub hexdump_level: HexdumpLevel,
     pub disable_console_debug: bool,
@@ -151,6 +152,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             advertise: false,
+            dongle_mode: false,
             debug: false,
             hexdump_level: HexdumpLevel::Disabled,
             disable_console_debug: false,
@@ -233,6 +235,7 @@ impl AppConfig {
         });
 
         doc["advertise"] = value(self.advertise);
+        doc["dongle_mode"] = value(self.dongle_mode);
         doc["debug"] = value(self.debug);
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
         doc["disable_console_debug"] = value(self.disable_console_debug);

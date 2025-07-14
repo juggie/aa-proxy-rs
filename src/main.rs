@@ -226,6 +226,7 @@ async fn tokio_main(
             loop {
                 match bluetooth_setup_connection(
                     config.read().await.advertise,
+                    config.read().await.dongle_mode,
                     config.read().await.btalias.clone(),
                     config.read().await.connect,
                     wifi_conf.clone(),

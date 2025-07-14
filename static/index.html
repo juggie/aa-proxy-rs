@@ -168,11 +168,21 @@
           </td>
         </tr>
         <tr>
+          <td><label for="dongle_mode">dongle_mode</label></td>
+          <td>
+            <input type="checkbox" role="switch" id="dongle_mode" /><br /><small
+              >Dongle mode</small
+            >
+          </td>
+        </tr>
+        <tr>
           <td><label for="btalias">btalias</label></td>
           <td>
             <input type="text" id="btalias" /><br /><small
               >BLE device name (how your bluetooth device is visible)<br />by
-              default it is <code>WirelessAADongle-CPUSERIAL</code></small
+              default it is <code>WirelessAADongle-CPUSERIAL</code><br />
+              for dongle mode you need to set it to:
+              <code>AndroidAuto-xxxxx</code></small
             >
           </td>
         </tr>
@@ -364,6 +374,7 @@
         const config = {};
         const ids = [
           "advertise",
+          "dongle_mode",
           "debug",
           "hexdump_level",
           "disable_console_debug",
