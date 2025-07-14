@@ -133,36 +133,39 @@ async fn power_up_and_wait_for_connection(
     let mut handle_aa = session.register_profile(profile).await?;
     info!("{} 📱 AA Wireless Profile: registered", NAME);
 
-    // Headset profile
-    let profile = Profile {
-        uuid: HSP_HS_UUID,
-        name: Some("HSP HS".to_string()),
-        require_authentication: Some(false),
-        require_authorization: Some(false),
-        ..Default::default()
-    };
-    let handle_hsp = match session.register_profile(profile).await {
-        Ok(handle_hsp) => {
-            info!("{} 🎧 Headset Profile (HSP): registered", NAME);
-            Some(handle_hsp)
+    let mut handle_hsp = None;
+    if true {
+        // Headset profile
+        let profile = Profile {
+            uuid: HSP_HS_UUID,
+            name: Some("HSP HS".to_string()),
+            require_authentication: Some(false),
+            require_authorization: Some(false),
+            ..Default::default()
+        };
+        match session.register_profile(profile).await {
+            Ok(handle) => {
+                info!("{} 🎧 Headset Profile (HSP): registered", NAME);
+                handle_hsp = Some(handle);
+            }
+            Err(e) => {
+                warn!(
+                    "{} 🎧 Headset Profile (HSP) registering error: {}, ignoring",
+                    NAME, e
+                );
+            }
         }
-        Err(e) => {
-            warn!(
-                "{} 🎧 Headset Profile (HSP) registering error: {}, ignoring",
-                NAME, e
-            );
-            None
-        }
-    };
+    }
 
     info!("{} ⏳ Waiting for phone to connect via bluetooth...", NAME);
 
     // try to connect to saved devices or provided one via command line
-    let connect_task: Option<JoinHandle<Result<()>>> = match connect {
-        Some(address) => {
+    let mut connect_task: Option<JoinHandle<Result<()>>> = None;
+    if true {
+        if let Some(address) = connect {
             let adapter_cloned = adapter.clone();
 
-            Some(tokio::spawn(async move {
+            connect_task = Some(tokio::spawn(async move {
                 let addresses = if address == Address::any() {
                     info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
                     adapter_cloned.device_addresses().await?
@@ -196,10 +199,9 @@ async fn power_up_and_wait_for_connection(
                     }
                     sleep(Duration::from_secs(1)).await;
                 }
-            }))
+            }));
         }
-        None => None,
-    };
+    }
 
     // handling connection to headset profile in own task
     let task_hsp = {
