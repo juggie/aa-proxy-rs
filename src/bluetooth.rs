@@ -135,7 +135,7 @@ async fn power_up_and_wait_for_connection(
     info!("{} 📱 AA Wireless Profile: registered", NAME);
 
     let mut handle_hsp = None;
-    if dongle_mode {
+    if !dongle_mode {
         // Headset profile
         let profile = Profile {
             uuid: HSP_HS_UUID,
@@ -162,7 +162,7 @@ async fn power_up_and_wait_for_connection(
 
     // try to connect to saved devices or provided one via command line
     let mut connect_task: Option<JoinHandle<Result<()>>> = None;
-    if dongle_mode {
+    if !dongle_mode {
         if let Some(address) = connect {
             let adapter_cloned = adapter.clone();
 
