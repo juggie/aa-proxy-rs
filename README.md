@@ -11,6 +11,7 @@ Currently it is intended to run as a more-or-less drop-in replacement of the `aa
 - fast: main IO loop is using modern [io_uring](https://kernel.dk/io_uring.pdf) kernel API
 - reconnecting: trying to reconnect/recover AndroidAuto connection in any possible case
 - bandwidth/transfer statistics
+- [embedded web interface](#embedded-web-interface)
 - stall transfer detection
 - [MITM (man-in-the-middle) mode](#mitm-mode) support with the following features:
   - DPI change
@@ -61,6 +62,12 @@ And this finally worked perfectly fine (and also really efficient as a bonus).
 - Currently only the default "connection strategy" is supported.
 - Because the project main functionality (data transfer) is dependent on kernel [io_uring](https://kernel.dk/io_uring.pdf) API, the Linux kernel has to be in version 5.10 or later.
 - My time resources are limited, so don't expect to prompt answers and ETAs on different requests. I am doing this as a hobby in my spare time.
+
+## Embedded web interface
+When you connect to the device's WiFi network, you can access the web interface, which is available by default at: [http://10.0.0.1](http://10.0.0.1).<br>
+Using the web interface, you can configure all settings that are also available in `/etc/aa-proxy-rs/config.toml`:<br>
+![Webserver preview](images/webserver.png)
+You can also download logs with a single click.
 
 ## How it works (technical)
 ![Hardware overview](images/aa-proxy-rs.webp)
