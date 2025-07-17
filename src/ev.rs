@@ -1,5 +1,7 @@
 use simplelog::*;
+use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::fs;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 
@@ -101,8 +103,18 @@ pub async fn send_ev_data(
     ev_battery_capacity: u64,
     ev_factor: f32,
 ) -> Result<()> {
-    // parse initial sample Ford data
-    let mut msg = SensorBatch::parse_from_bytes(FORD_EV_MODEL)?;
+    // obtain binary model data
+    let model_path: PathBuf = PathBuf::from(EV_MODEL_FILE);
+    let data = if fs::try_exists(&model_path).await? {
+        // reading model from file
+        fs::read(&model_path).await?
+    } else {
+        // default initial sample Ford data
+        FORD_EV_MODEL.to_vec()
+    };
+
+    // parse
+    let mut msg = SensorBatch::parse_from_bytes(&data)?;
 
     // apply our changes
     msg.energy_model_control[0].u1.as_mut().unwrap().u6 = 1.0;
