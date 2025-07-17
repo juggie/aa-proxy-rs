@@ -64,14 +64,17 @@ pub async fn rest_server(tx: Sender<Packet>, ctx: Arc<Mutex<RestContext>>) -> Re
                 info!("{} Received battery level: {}", NAME, data.battery_level);
                 let rest_ctx = ctx.lock().await;
                 if let Some(ch) = rest_ctx.sensor_channel {
-                    let _ = send_ev_data(
+                    if let Err(e) = send_ev_data(
                         tx,
                         data.battery_level,
                         ch,
                         rest_ctx.ev_battery_capacity,
                         rest_ctx.ev_factor,
                     )
-                    .await;
+                    .await
+                    {
+                        error!("{} EV model error: {}", NAME, e);
+                    }
                 } else {
                     warn!("{} Not sending packet because no sensor channel yet", NAME);
                 }
