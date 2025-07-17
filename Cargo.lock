@@ -15,6 +15,7 @@ dependencies = [
  "config",
  "dbus",
  "futures",
+ "hex",
  "humantime",
  "hyper",
  "kobject-uevent",
