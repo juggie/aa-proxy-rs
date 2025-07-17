@@ -15,6 +15,7 @@ use serde::Deserialize;
 use warp::Filter;
 
 pub static FORD_EV_MODEL: &[u8] = include_bytes!("protos/ford_ev_model.bin");
+pub const EV_MODEL_FILE: &str = "/etc/aa-proxy-rs/ev_model.bin";
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> ev: </>";

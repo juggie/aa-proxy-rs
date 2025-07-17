@@ -1,18 +1,21 @@
 use crate::config::AppConfig;
 use crate::config::SharedConfig;
+use crate::ev::EV_MODEL_FILE;
 use axum::{
     body::Body,
-    extract::{Query, State},
-    http::{header, Response, StatusCode},
+    extract::{Query, RawBody, State},
+    http::{header, HeaderMap, Response, StatusCode},
     response::{Html, IntoResponse},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use chrono::Local;
+use hyper::body::to_bytes;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
+use tokio::io::AsyncWriteExt;
 
 const TEMPLATE: &str = include_str!("../static/index.html");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
@@ -29,6 +32,7 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/config", get(get_config).post(set_config))
         .route("/download", get(download_handler))
         .route("/restart", get(restart_handler))
+        .route("/upload-hex-model", post(upload_hex_model_handler))
         .with_state(state)
 }
 
@@ -80,6 +84,66 @@ async fn download_handler(
             .status(StatusCode::NOT_FOUND)
             .body(Body::from("Cannot access log file"))
             .unwrap(),
+    }
+}
+
+async fn upload_hex_model_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    RawBody(body): RawBody,
+) -> impl IntoResponse {
+    // read body as bytes
+    let body_bytes = match to_bytes(body).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Unable to read body: {}", err),
+            )
+        }
+    };
+
+    // convert to UTF-8 string
+    let hex_str = match std::str::from_utf8(&body_bytes) {
+        Ok(s) => s.trim(), // remove whitespaces
+        Err(err) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Unable to parse body to UTF-8: {}", err),
+            )
+        }
+    };
+
+    // decode into Vec<u8>
+    let binary_data = match hex::decode(hex_str) {
+        Ok(data) => data,
+        Err(err) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid hex data: {}", err),
+            )
+        }
+    };
+
+    // save to model file
+    let path: PathBuf = PathBuf::from(EV_MODEL_FILE);
+    match fs::File::create(&path).await {
+        Ok(mut file) => {
+            if let Err(err) = file.write_all(&binary_data).await {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error saving model file: {}", err),
+                );
+            }
+            (
+                StatusCode::OK,
+                format!("File saved correctly as {:?}", path),
+            )
+        }
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("File create error: {}", err),
+        ),
     }
 }
 
