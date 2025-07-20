@@ -11,6 +11,7 @@ use axum::{
 };
 use chrono::Local;
 use hyper::body::to_bytes;
+use simplelog::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -19,6 +20,9 @@ use tokio::io::AsyncWriteExt;
 
 const TEMPLATE: &str = include_str!("../static/index.html");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
+
+// module name for logging engine
+const NAME: &str = "<i><bright-black> web: </>";
 
 #[derive(Clone)]
 pub struct AppState {
