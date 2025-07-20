@@ -1,6 +1,9 @@
 use crate::config::AppConfig;
 use crate::config::SharedConfig;
+use crate::ev::send_ev_data;
+use crate::ev::BatteryData;
 use crate::ev::EV_MODEL_FILE;
+use crate::mitm::Packet;
 use axum::{
     body::Body,
     extract::{Query, RawBody, State},
@@ -17,6 +20,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc::Sender;
 
 const TEMPLATE: &str = include_str!("../static/index.html");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
@@ -28,6 +32,8 @@ const NAME: &str = "<i><bright-black> web: </>";
 pub struct AppState {
     pub config: SharedConfig,
     pub config_file: Arc<PathBuf>,
+    pub tx: Option<Sender<Packet>>,
+    pub sensor_channel: Arc<Option<u8>>,
 }
 
 pub fn app(state: Arc<AppState>) -> Router {
@@ -37,6 +43,7 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/download", get(download_handler))
         .route("/restart", get(restart_handler))
         .route("/upload-hex-model", post(upload_hex_model_handler))
+        .route("/battery", post(battery_handler))
         .with_state(state)
 }
 
@@ -47,6 +54,33 @@ async fn index() -> impl IntoResponse {
         .replace("{GIT_HASH}", env!("GIT_HASH"))
         .replace("{PICO_CSS}", PICO_CSS);
     Html(html)
+}
+
+pub async fn battery_handler(
+    State(state): State<Arc<AppState>>,
+    Json(data): Json<BatteryData>,
+) -> impl IntoResponse {
+    if data.battery_level < 0.0 || data.battery_level > 100.0 {
+        let msg = format!(
+            "battery_level out of range: {} (expected 0.0–100.0)",
+            data.battery_level
+        );
+        return (StatusCode::BAD_REQUEST, msg).into_response();
+    }
+
+    info!("{} Received battery level: {}", NAME, data.battery_level);
+
+    if let Some(ch) = *state.sensor_channel {
+        if let Some(tx) = &state.tx {
+            if let Err(e) = send_ev_data(tx.clone(), data.battery_level, ch, 0, 0.0).await {
+                error!("{} EV model error: {}", NAME, e);
+            }
+        }
+    } else {
+        warn!("{} Not sending packet because no sensor channel yet", NAME);
+    }
+
+    (StatusCode::OK, "OK").into_response()
 }
 
 fn generate_filename() -> String {

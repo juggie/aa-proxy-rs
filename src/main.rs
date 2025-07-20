@@ -171,6 +171,8 @@ async fn tokio_main(
         let state = web::AppState {
             config: config.clone(),
             config_file: config_file.into(),
+            tx: None,
+            sensor_channel: None.into(),
         };
         let app = web::app(state.into());
 

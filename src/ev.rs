@@ -28,7 +28,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 #[derive(Debug, Deserialize)]
 pub struct BatteryData {
-    battery_level: f32,
+    pub battery_level: f32,
 }
 
 // reset server context
