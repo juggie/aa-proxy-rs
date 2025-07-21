@@ -25,7 +25,11 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 #[derive(Debug, Deserialize)]
 pub struct BatteryData {
-    pub battery_level: f32,
+    pub battery_level_percentage: Option<f32>,
+    pub battery_level_wh: Option<u64>,
+    pub battery_capacity_wh: Option<u64>,
+    pub reference_air_density: Option<f32>,
+    pub external_temp_celsius: Option<f32>,
 }
 
 fn scale_percent_to_value(percent: f32, max_value: u64) -> u64 {
@@ -34,13 +38,7 @@ fn scale_percent_to_value(percent: f32, max_value: u64) -> u64 {
 }
 
 /// EV sensor batch data send
-pub async fn send_ev_data(
-    tx: Sender<Packet>,
-    level: f32,
-    sensor_ch: u8,
-    ev_battery_capacity: u64,
-    ev_factor: f32,
-) -> Result<()> {
+pub async fn send_ev_data(tx: Sender<Packet>, sensor_ch: u8, batt: BatteryData) -> Result<()> {
     // obtain binary model data
     let model_path: PathBuf = PathBuf::from(EV_MODEL_FILE);
     let data = if fs::try_exists(&model_path).await? {
@@ -55,42 +53,42 @@ pub async fn send_ev_data(
     let mut msg = SensorBatch::parse_from_bytes(&data)?;
 
     // apply our changes
-    msg.energy_model_control[0].u1.as_mut().unwrap().u6 = 1.0;
-    msg.energy_model_control[0]
-        .u1
-        .as_mut()
-        .unwrap()
-        .u2
-        .as_mut()
-        .unwrap()
-        .u1 = 1;
-    msg.energy_model_control[0]
-        .u2
-        .as_mut()
-        .unwrap()
-        .u3
-        .as_mut()
-        .unwrap()
-        .u1 = ev_factor;
-
-    // kwh in battery?
-    msg.energy_model_control[0]
-        .u1
-        .as_mut()
-        .unwrap()
-        .u3
-        .as_mut()
-        .unwrap()
-        .u1 = scale_percent_to_value(level, ev_battery_capacity);
-    // max battery kwh?
-    msg.energy_model_control[0]
-        .u1
-        .as_mut()
-        .unwrap()
-        .u4
-        .as_mut()
-        .unwrap()
-        .u1 = ev_battery_capacity;
+    if let Some(capacity_wh) = batt.battery_capacity_wh {
+        msg.energy_model_control[0]
+            .u1
+            .as_mut()
+            .unwrap()
+            .u4
+            .as_mut()
+            .unwrap()
+            .u1 = capacity_wh;
+    }
+    if let Some(level_wh) = batt.battery_level_wh {
+        msg.energy_model_control[0]
+            .u1
+            .as_mut()
+            .unwrap()
+            .u3
+            .as_mut()
+            .unwrap()
+            .u1 = level_wh;
+    }
+    if let Some(level) = batt.battery_level_percentage {
+        msg.energy_model_control[0]
+            .u1
+            .as_mut()
+            .unwrap()
+            .u3
+            .as_mut()
+            .unwrap()
+            .u1 = scale_percent_to_value(level, msg.energy_model_control[0].u1.u4.u1);
+    }
+    if let Some(reference_air_density) = batt.reference_air_density {
+        msg.energy_model_control[0].u1.as_mut().unwrap().u6 = reference_air_density;
+    }
+    if let Some(external_temp_celsius) = batt.external_temp_celsius {
+        msg.energy_model_control[0].u1.as_mut().unwrap().u7 = external_temp_celsius;
+    }
 
     // creating back binary data for sending
     let mut payload: Vec<u8> = msg.write_to_bytes()?;

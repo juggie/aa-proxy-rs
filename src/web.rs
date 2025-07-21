@@ -61,19 +61,31 @@ pub async fn battery_handler(
     State(state): State<Arc<AppState>>,
     Json(data): Json<BatteryData>,
 ) -> impl IntoResponse {
-    if data.battery_level < 0.0 || data.battery_level > 100.0 {
-        let msg = format!(
-            "battery_level out of range: {} (expected 0.0–100.0)",
-            data.battery_level
-        );
-        return (StatusCode::BAD_REQUEST, msg).into_response();
+    match data.battery_level_percentage {
+        Some(level) => {
+            if level < 0.0 || level > 100.0 {
+                let msg = format!(
+                    "battery_level_percentage out of range: {} (expected 0.0–100.0)",
+                    level
+                );
+                return (StatusCode::BAD_REQUEST, msg).into_response();
+            }
+        }
+        None => {
+            if data.battery_level_wh.is_none() {
+                let msg = format!(
+                    "Either `battery_level_percentage` or `battery_level_wh` has to be set",
+                );
+                return (StatusCode::BAD_REQUEST, msg).into_response();
+            }
+        }
     }
 
-    info!("{} Received battery level: {}", NAME, data.battery_level);
+    info!("{} Received battery data: {:?}", NAME, data);
 
     if let Some(ch) = *state.sensor_channel.lock().await {
         if let Some(tx) = state.tx.lock().await.clone() {
-            if let Err(e) = send_ev_data(tx.clone(), data.battery_level, ch, 0, 0.0).await {
+            if let Err(e) = send_ev_data(tx.clone(), ch, data).await {
                 error!("{} EV model error: {}", NAME, e);
             }
         }
