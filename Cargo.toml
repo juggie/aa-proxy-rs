@@ -36,7 +36,6 @@ byteorder = "1.5.0"
 config = "0.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
-warp = "0.3"
 axum = "0.6"
 hyper = { version = "0.14", features = ["full"] }
 toml_edit = "0.22"
