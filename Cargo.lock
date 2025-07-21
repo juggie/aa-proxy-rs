@@ -37,7 +37,6 @@ dependencies = [
  "tokio-fd",
  "tokio-uring",
  "toml_edit",
- "tower",
  "warp",
 ]
 
