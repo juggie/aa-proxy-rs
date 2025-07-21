@@ -141,8 +141,6 @@ pub struct AppConfig {
     pub ev: bool,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub ev_battery_logger: Option<PathBuf>,
-    pub ev_battery_capacity: u64,
-    pub ev_factor: f32,
 
     #[serde(skip)]
     pub restart_requested: bool,
@@ -179,8 +177,6 @@ impl Default for AppConfig {
             dhu: false,
             ev: false,
             ev_battery_logger: None,
-            ev_battery_capacity: 22000,
-            ev_factor: 0.075,
             restart_requested: false,
         }
     }
@@ -277,8 +273,6 @@ impl AppConfig {
         if let Some(path) = &self.ev_battery_logger {
             doc["ev_battery_logger"] = value(path.display().to_string());
         }
-        doc["ev_battery_capacity"] = value(self.ev_battery_capacity as i64);
-        doc["ev_factor"] = value(self.ev_factor as f64);
 
         let _ = remount_root(false);
         info!(
