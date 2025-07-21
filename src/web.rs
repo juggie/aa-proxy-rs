@@ -21,6 +21,7 @@ use std::sync::Arc;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::Mutex;
 
 const TEMPLATE: &str = include_str!("../static/index.html");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
@@ -32,8 +33,8 @@ const NAME: &str = "<i><bright-black> web: </>";
 pub struct AppState {
     pub config: SharedConfig,
     pub config_file: Arc<PathBuf>,
-    pub tx: Option<Sender<Packet>>,
-    pub sensor_channel: Arc<Option<u8>>,
+    pub tx: Arc<Mutex<Option<Sender<Packet>>>>,
+    pub sensor_channel: Arc<Mutex<Option<u8>>>,
 }
 
 pub fn app(state: Arc<AppState>) -> Router {
@@ -70,8 +71,8 @@ pub async fn battery_handler(
 
     info!("{} Received battery level: {}", NAME, data.battery_level);
 
-    if let Some(ch) = *state.sensor_channel {
-        if let Some(tx) = &state.tx {
+    if let Some(ch) = *state.sensor_channel.lock().await {
+        if let Some(tx) = state.tx.lock().await.clone() {
             if let Err(e) = send_ev_data(tx.clone(), data.battery_level, ch, 0, 0.0).await {
                 error!("{} EV model error: {}", NAME, e);
             }

@@ -10,6 +10,7 @@ mod web;
 
 use crate::config::AppConfig;
 use crate::config::SharedConfig;
+use crate::mitm::Packet;
 use bluetooth::bluetooth_setup_connection;
 use bluetooth::bluetooth_stop;
 use clap::Parser;
@@ -25,6 +26,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Builder;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use tokio::time::Instant;
 
@@ -162,6 +165,8 @@ async fn tokio_main(
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
     config_file: PathBuf,
+    tx: Arc<Mutex<Option<Sender<Packet>>>>,
+    sensor_channel: Arc<Mutex<Option<u8>>>,
 ) {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
@@ -171,8 +176,8 @@ async fn tokio_main(
         let state = web::AppState {
             config: config.clone(),
             config_file: config_file.into(),
-            tx: None,
-            sensor_channel: None.into(),
+            tx,
+            sensor_channel,
         };
         let app = web::app(state.into());
 
@@ -326,15 +331,33 @@ fn main() {
     let tcp_start_cloned = tcp_start.clone();
     let config = Arc::new(RwLock::new(config));
     let config_cloned = config.clone();
+    let tx = Arc::new(Mutex::new(None));
+    let tx_cloned = tx.clone();
+    let sensor_channel = Arc::new(Mutex::new(None));
+    let sensor_channel_cloned = sensor_channel.clone();
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
     runtime.spawn(async move {
-        tokio_main(config_cloned, need_restart, tcp_start, args.config.clone()).await
+        tokio_main(
+            config_cloned,
+            need_restart,
+            tcp_start,
+            args.config.clone(),
+            tx_cloned,
+            sensor_channel_cloned,
+        )
+        .await
     });
 
     // start tokio_uring runtime simultaneously
-    let _ = tokio_uring::start(io_loop(need_restart_cloned, tcp_start_cloned, config));
+    let _ = tokio_uring::start(io_loop(
+        need_restart_cloned,
+        tcp_start_cloned,
+        config,
+        tx,
+        sensor_channel,
+    ));
 
     info!(
         "🚩 aa-proxy-rs terminated, running time: {}",

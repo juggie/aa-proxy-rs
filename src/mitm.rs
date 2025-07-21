@@ -29,7 +29,6 @@ use protos::ControlMessageType::{self, *};
 
 use crate::config::AppConfig;
 use crate::config::HexdumpLevel;
-use crate::ev::RestContext;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
@@ -271,7 +270,7 @@ pub async fn pkt_modify_hook(
     video_in_motion: bool,
     ev: bool,
     ctx: &mut ModifyContext,
-    rest_ctx: Option<Arc<tokio::sync::Mutex<RestContext>>>,
+    sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
     ev_battery_logger: Option<PathBuf>,
 ) -> Result<bool> {
     // if for some reason we have too small packet, bail out
@@ -413,10 +412,8 @@ pub async fn pkt_modify_hook(
                     // set in local context
                     ctx.sensor_channel = Some(svc.id() as u8);
                     // set in REST server context for remote EV requests
-                    if let Some(ctx) = rest_ctx {
-                        let mut rest_ctx = ctx.lock().await;
-                        rest_ctx.sensor_channel = Some(svc.id() as u8);
-                    }
+                    let mut sc_lock = sensor_channel.lock().await;
+                    *sc_lock = Some(svc.id() as u8);
                 }
             }
 
@@ -652,7 +649,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     mut rx: Receiver<Packet>,
     mut rxr: Receiver<Packet>,
     config: AppConfig,
-    rest_ctx: Option<Arc<tokio::sync::Mutex<RestContext>>>,
+    sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
 ) -> Result<()> {
     let passthrough = !config.mitm;
     let hex_requested = config.hexdump_level;
@@ -798,7 +795,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 config.video_in_motion,
                 config.ev,
                 &mut ctx,
-                rest_ctx.clone(),
+                sensor_channel.clone(),
                 config.ev_battery_logger.clone(),
             )
             .await?;
@@ -843,7 +840,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                         config.video_in_motion,
                         config.ev,
                         &mut ctx,
-                        rest_ctx.clone(),
+                        sensor_channel.clone(),
                         config.ev_battery_logger.clone(),
                     )
                     .await?;

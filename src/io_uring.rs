@@ -33,7 +33,6 @@ pub const BUFFER_LEN: usize = 16 * 1024;
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
 use crate::config::SharedConfig;
-use crate::ev::{rest_server, RestContext};
 use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
 use crate::mitm::Packet;
@@ -210,6 +209,8 @@ pub async fn io_loop(
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
     config: SharedConfig,
+    tx: Arc<Mutex<Option<Sender<Packet>>>>,
+    sensor_channel: Arc<Mutex<Option<u8>>>,
 ) -> Result<()> {
     // prepare/bind needed TCP listeners
     let mut dhu_listener = None;
@@ -367,19 +368,9 @@ pub async fn io_loop(
         }
 
         // handling battery in JSON
-        let mut rest_server_handle = None;
-        let mut rest_ctx = None;
         if config.mitm && config.ev {
-            let ctx = RestContext {
-                sensor_channel: None,
-                ev_battery_capacity: config.ev_battery_capacity,
-                ev_factor: config.ev_factor,
-            };
-            let ctx = Arc::new(Mutex::new(ctx));
-
-            let tx = tx_hu.clone();
-            rest_server_handle = Some(tokio::spawn(rest_server(tx, ctx.clone())));
-            rest_ctx = Some(ctx);
+            let mut tx_lock = tx.lock().await;
+            *tx_lock = Some(tx_hu.clone());
         }
 
         // dedicated reading threads:
@@ -394,7 +385,7 @@ pub async fn io_loop(
             rx_hu,
             rxr_md,
             config.clone(),
-            rest_ctx.clone(),
+            sensor_channel.clone(),
         ));
         from_stream = tokio_uring::spawn(proxy(
             ProxyType::MobileDevice,
@@ -404,7 +395,7 @@ pub async fn io_loop(
             rx_md,
             rxr_hu,
             config.clone(),
-            rest_ctx.clone(),
+            sensor_channel.clone(),
         ));
 
         // Thread for monitoring transfer
@@ -439,9 +430,12 @@ pub async fn io_loop(
         from_file.abort();
         from_stream.abort();
         monitor.abort();
-        if let Some(handle) = rest_server_handle {
-            handle.abort();
-        }
+
+        // set webserver context EV stuff to None
+        let mut tx_lock = tx.lock().await;
+        *tx_lock = None;
+        let mut sc_lock = sensor_channel.lock().await;
+        *sc_lock = None;
         // stop EV battery logger if neded
         if let Some(ref path) = config.ev_battery_logger {
             let _ = Command::new(path).arg("stop").spawn();
