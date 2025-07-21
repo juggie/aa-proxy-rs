@@ -139,8 +139,8 @@ async fn download_handler(
 }
 
 async fn upload_hex_model_handler(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    State(_state): State<Arc<AppState>>,
+    _headers: HeaderMap,
     RawBody(body): RawBody,
 ) -> impl IntoResponse {
     // read body as bytes
