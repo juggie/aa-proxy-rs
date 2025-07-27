@@ -298,14 +298,21 @@ pub async fn io_loop(
                 "{} 📂 Opening USB accessory device: <u>{}</u>",
                 NAME, USB_ACCESSORY_PATH
             );
-            hu_usb = Some(
-                OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create(false)
-                    .open(USB_ACCESSORY_PATH)
-                    .await?,
-            );
+            match OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(false)
+                .open(USB_ACCESSORY_PATH)
+                .await
+            {
+                Ok(s) => hu_usb = Some(s),
+                Err(e) => {
+                    error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
+                    // notify main loop to restart
+                    need_restart.notify_one();
+                    continue;
+                }
+            }
         }
 
         info!("{} ♾️ Starting to proxy data between HU and MD...", NAME);
