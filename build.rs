@@ -1,3 +1,4 @@
+use std::env;
 use std::io;
 use std::io::Write;
 use std::process::Command;
@@ -12,7 +13,11 @@ fn main() {
         .output()
         .unwrap();
     let mut result = String::from_utf8(output.stdout).unwrap();
-    if !Command::new("git")
+    if result.is_empty() {
+        result = env::var("BUILDROOT_COMMIT").unwrap_or_default();
+        result.truncate(7);
+        result = format!("br#{}", result); // add buildroot prefix
+    } else if !Command::new("git")
         .args(&["diff", "--quiet"])
         .status()
         .expect("failed to execute process")
@@ -27,6 +32,10 @@ fn main() {
         .output()
         .unwrap();
     result = String::from_utf8(output.stdout).unwrap().replace("-", "");
+    if result.is_empty() {
+        result = env::var("AA_PROXY_COMMIT").unwrap_or_default();
+        result.truncate(7);
+    }
     _ = write!(&mut stdout, "cargo:rustc-env=GIT_DATE={}\n", result);
 
     output = Command::new("date")
