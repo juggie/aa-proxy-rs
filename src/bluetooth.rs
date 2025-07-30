@@ -205,7 +205,7 @@ async fn power_up_and_wait_for_connection(
     }
 
     // handling connection to headset profile in own task
-    let task_hsp = {
+    let mut task_hsp = {
         if let Some(mut handle_hsp) = handle_hsp {
             Some(tokio::spawn(async move {
                 let req = handle_hsp
@@ -226,15 +226,37 @@ async fn power_up_and_wait_for_connection(
         }
     };
 
+    /// we might have a tasks which should be aborted on errors
+    /// this function is taking care of this before next bluetooth
+    /// connection attempts
+    fn abort_tasks(
+        t1: &mut Option<JoinHandle<Result<()>>>,
+        t2: &mut Option<JoinHandle<Result<ProfileHandle>>>,
+    ) {
+        if let Some(task) = t1 {
+            task.abort();
+        }
+        if let Some(task) = t2 {
+            task.abort();
+        }
+    }
+
     let req = timeout(bt_timeout, handle_aa.next())
-        .await?
+        .await
+        .map_err(|e| {
+            abort_tasks(&mut connect_task, &mut task_hsp);
+            e
+        })?
         .expect("received no connect request");
     info!(
         "{} 📱 AA Wireless Profile: connect from: <b>{}</>",
         NAME,
         req.device()
     );
-    let stream = req.accept()?;
+    let stream = req.accept().map_err(|e| {
+        abort_tasks(&mut connect_task, &mut task_hsp);
+        e
+    })?;
 
     // we have a connection from phone, stop connect_task
     if let Some(task) = connect_task {
