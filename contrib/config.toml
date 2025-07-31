@@ -1,6 +1,6 @@
 ### GENERAL OPTIONS
   # Log file path, by default it saved to /var/log in `tmpfs`/memory, if you want you can change e.g. to:
-  # "/persist/aa-proxy-rs.log" and this way it will be saved to SD card (appended, not replaced)
+  # "/data/aa-proxy-rs.log" and this way it will be saved to SD card (appended, not replaced)
   logfile = "/var/log/aa-proxy-rs.log"
 
   # Interval of showing data transfer statistics in the log (0 = disabled) [seconds]
