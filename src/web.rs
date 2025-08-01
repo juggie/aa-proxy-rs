@@ -25,6 +25,8 @@ use tokio::sync::Mutex;
 
 const TEMPLATE: &str = include_str!("../static/index.html");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
+const AA_PROXY_RS_URL: &str = "https://github.com/aa-proxy/aa-proxy-rs";
+const BUILDROOT_URL: &str = "https://github.com/aa-proxy/buildroot";
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> web: </>";
@@ -48,11 +50,51 @@ pub fn app(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+fn linkify_git_info(git_date: &str, git_hash: &str) -> String {
+    // check if git_date is really a YYYYMMDD date
+    let is_date = git_date.len() == 8 && git_date.chars().all(|c| c.is_ascii_digit());
+
+    if is_date {
+        let clean_hash = git_hash.trim_end_matches("-dirty");
+        let url = format!(
+            "<a href=\"{}/commit/{}\" target=\"_blank\">{}</a>{}",
+            AA_PROXY_RS_URL,
+            clean_hash,
+            clean_hash,
+            {
+                if clean_hash == git_hash {
+                    ""
+                } else {
+                    "-dirty"
+                }
+            }
+        );
+        format!("{}-{}", git_date, url)
+    } else if git_hash.starts_with("br#") {
+        let url_aaproxy = format!(
+            "<a href=\"{}/commit/{}\" target=\"_blank\">{}</a>",
+            AA_PROXY_RS_URL, git_date, git_date,
+        );
+
+        let clean_hash = git_date.trim_start_matches("br#");
+        let url_br = format!(
+            "br#<a href=\"{}/commit/{}\" target=\"_blank\">{}</a>",
+            BUILDROOT_URL, clean_hash, clean_hash,
+        );
+        format!("{}-{}", url_aaproxy, url_br)
+    } else {
+        // format not recognized, use without links
+        format!("{}-{}", git_date, git_hash)
+    }
+}
+
 async fn index() -> impl IntoResponse {
     let html = TEMPLATE
         .replace("{BUILD_DATE}", env!("BUILD_DATE"))
-        .replace("{GIT_DATE}", env!("GIT_DATE"))
-        .replace("{GIT_HASH}", env!("GIT_HASH"))
+        .replace(
+            "{GIT_INFO}",
+            &linkify_git_info(env!("GIT_DATE"), env!("GIT_HASH")),
+        )
         .replace("{PICO_CSS}", PICO_CSS);
     Html(html)
 }
