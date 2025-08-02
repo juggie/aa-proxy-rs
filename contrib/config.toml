@@ -98,3 +98,12 @@
   # Path to script executed when Android Auto session starts/stops and EV battery data is needed
   # Argument "start" or "stop" is appended automatically when invoked
   ev_battery_logger = ""
+
+  # List of EV connector types supported by your car.
+  # Possible values (separate multiple with a comma ','):
+  # EV_CONNECTOR_TYPE_J1772, EV_CONNECTOR_TYPE_MENNEKES, EV_CONNECTOR_TYPE_CHADEMO,
+  # EV_CONNECTOR_TYPE_COMBO_1, EV_CONNECTOR_TYPE_COMBO_2, EV_CONNECTOR_TYPE_TESLA_SUPERCHARGER,
+  # EV_CONNECTOR_TYPE_GBT
+  #
+  # If left empty, the default is EV_CONNECTOR_TYPE_MENNEKES.
+  ev_connector_types = ""

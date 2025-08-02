@@ -141,6 +141,8 @@ pub struct AppConfig {
     pub ev: bool,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub ev_battery_logger: Option<PathBuf>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub ev_connector_types: Option<String>,
 
     #[serde(skip)]
     pub restart_requested: bool,
@@ -178,6 +180,7 @@ impl Default for AppConfig {
             ev: false,
             ev_battery_logger: None,
             restart_requested: false,
+            ev_connector_types: None,
         }
     }
 }
@@ -272,6 +275,9 @@ impl AppConfig {
         doc["ev"] = value(self.ev);
         if let Some(path) = &self.ev_battery_logger {
             doc["ev_battery_logger"] = value(path.display().to_string());
+        }
+        if let Some(ev_connector_types) = &self.ev_connector_types {
+            doc["ev_connector_types"] = value(ev_connector_types);
         }
 
         let _ = remount_root(false);

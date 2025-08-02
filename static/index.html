@@ -42,8 +42,8 @@
             <small
               >Log file path, by default it is saved to <code>/var/log</code> in
               <code>tmpfs</code>/memory. If you want, you can change it e.g. to
-              <code>/data/aa-proxy-rs.log</code> and it will be saved to SD
-              card (appended, not replaced).</small
+              <code>/data/aa-proxy-rs.log</code> and it will be saved to SD card
+              (appended, not replaced).</small
             >
           </td>
         </tr>
@@ -294,6 +294,21 @@
             >
           </td>
         </tr>
+        <tr>
+          <td><label for="ev_connector_types">ev_connector_types</label></td>
+          <td>
+            <input type="text" id="ev_connector_types" /><br /><small>
+              List of EV connector types supported by your car. Possible values
+              (separate multiple with a comma ','):<br />
+              EV_CONNECTOR_TYPE_J1772, EV_CONNECTOR_TYPE_MENNEKES,
+              EV_CONNECTOR_TYPE_CHADEMO, EV_CONNECTOR_TYPE_COMBO_1,
+              EV_CONNECTOR_TYPE_COMBO_2, EV_CONNECTOR_TYPE_TESLA_SUPERCHARGER,
+              EV_CONNECTOR_TYPE_GBT<br />
+
+              If left empty, the default is EV_CONNECTOR_TYPE_MENNEKES.
+            </small>
+          </td>
+        </tr>
       </table>
     </form>
 
@@ -384,6 +399,7 @@
           "dhu",
           "ev",
           "ev_battery_logger",
+          "ev_connector_types",
         ];
         ids.forEach((id) => (config[id] = getValue(id)));
         await fetch("/config", {

@@ -24,7 +24,7 @@ use crate::mitm::AudioStreamType::*;
 use crate::mitm::SensorMessageId::*;
 use crate::mitm::SensorType::*;
 use protobuf::text_format::print_to_string_pretty;
-use protobuf::{Enum, Message, MessageDyn};
+use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
 use crate::config::AppConfig;
@@ -272,6 +272,7 @@ pub async fn pkt_modify_hook(
     ctx: &mut ModifyContext,
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
     ev_battery_logger: Option<PathBuf>,
+    connector_types: Option<String>,
 ) -> Result<bool> {
     // if for some reason we have too small packet, bail out
     if pkt.payload.len() < 2 {
@@ -466,12 +467,20 @@ pub async fn pkt_modify_hook(
                         .supported_fuel_types = vec![FuelType::FUEL_TYPE_ELECTRIC.into()];
 
                     // supported connector types
-                    // FIXME: make this connectors configurable via config
+                    let connectors: Vec<EnumOrUnknown<EvConnectorType>> = match connector_types {
+                        Some(types) => types
+                            .split(',')
+                            .filter_map(|s| EvConnectorType::from_str(s.trim()))
+                            .map(EnumOrUnknown::new)
+                            .collect(),
+                        None => {
+                            vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()]
+                        }
+                    };
                     svc.sensor_source_service
                         .as_mut()
                         .unwrap()
-                        .supported_ev_connector_types =
-                        vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()];
+                        .supported_ev_connector_types = connectors;
                 }
             }
 
@@ -797,6 +806,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 &mut ctx,
                 sensor_channel.clone(),
                 config.ev_battery_logger.clone(),
+                config.ev_connector_types.clone(),
             )
             .await?;
             let _ = pkt_debug(
@@ -842,6 +852,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                         &mut ctx,
                         sensor_channel.clone(),
                         config.ev_battery_logger.clone(),
+                        config.ev_connector_types.clone(),
                     )
                     .await?;
                     let _ = pkt_debug(
