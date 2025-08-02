@@ -387,7 +387,7 @@ pub async fn io_loop(
         from_file = tokio_uring::spawn(proxy(
             ProxyType::HeadUnit,
             hu_w,
-            stream_bytes.clone(),
+            file_bytes.clone(),
             tx_hu.clone(),
             rx_hu,
             rxr_md,
@@ -397,7 +397,7 @@ pub async fn io_loop(
         from_stream = tokio_uring::spawn(proxy(
             ProxyType::MobileDevice,
             md_w,
-            file_bytes.clone(),
+            stream_bytes.clone(),
             tx_md,
             rx_md,
             rxr_hu,
