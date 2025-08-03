@@ -4,17 +4,13 @@ use serde::{Deserialize, Serialize};
 use simplelog::*;
 use std::{
     fmt::{self, Display},
-    fs, io,
+    fs,
     path::PathBuf,
-    process::{Command, Stdio},
     str::FromStr,
     sync::Arc,
 };
 use tokio::sync::RwLock;
 use toml_edit::{value, DocumentMut};
-
-// module name for logging engine
-const NAME: &str = "<i><bright-black> config: </>";
 
 pub type SharedConfig = Arc<RwLock<AppConfig>>;
 
@@ -185,34 +181,6 @@ impl Default for AppConfig {
     }
 }
 
-/// Remount `/` as readonly (`lock = true`) or read-write (`lock = false`)
-fn remount_root(lock: bool) -> io::Result<()> {
-    let mode = if lock { "remount,ro" } else { "remount,rw" };
-
-    let status = Command::new("mount")
-        .args(&["-o", mode, "/"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()?;
-
-    if status.success() {
-        info!(
-            "{} Remount as {} successful",
-            NAME,
-            if lock { "read-only" } else { "read-write" }
-        );
-    } else {
-        error!(
-            "{} Remount as {} failed: {:?}",
-            NAME,
-            if lock { "read-only" } else { "read-write" },
-            status
-        );
-    }
-
-    Ok(())
-}
-
 impl AppConfig {
     pub fn load(config_file: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         use ::config::File;
@@ -280,13 +248,6 @@ impl AppConfig {
             doc["ev_connector_types"] = value(ev_connector_types);
         }
 
-        let _ = remount_root(false);
-        info!(
-            "{} Saving new configuration to file: {}",
-            NAME,
-            config_file.display()
-        );
         let _ = fs::write(config_file, doc.to_string());
-        let _ = remount_root(true);
     }
 }
