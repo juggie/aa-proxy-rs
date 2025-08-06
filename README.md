@@ -49,12 +49,13 @@ This project is currently tested and built for the following Raspberry Pi boards
 > **Raspberry Pi 3 B+ is _not_ supported** due to the lack of USB OTG support.
 
 > [!WARNING]
-> - **2.4GHz Wi-Fi is being deprecated by Google** and is no longer a reliable long-term solution.
->   Newer head units with higher resolutions (e.g. Full HD displays in some Kia/Hyundai models) require **5GHz Wi-Fi** to function without .
->   Only boards with 5GHz-capable Wi-Fi chips will be able to support full resolution.
+> - **2.4GHz Wi-Fi is being deprecated by Google** and is no longer a reliable long-term solution.  
+>   Newer head units with higher resolutions (e.g. Full HD displays in some Kia/Hyundai models) require **5GHz Wi-Fi**
+>   to function **with full resolution support**.  
+>   Only boards with 5GHz-capable Wi-Fi chips will be able to utilize the full display resolution.  
 >   Simply changing the DPI will not solve this limitation.
 >
-> - Additionally, **2.4GHz Wi-Fi can interfere with Bluetooth**, since both operate on the same frequency band.
+> - Additionally, **2.4GHz Wi-Fi can interfere with Bluetooth**, since both operate on the same frequency band.  
 >   This can occasionally cause connection issues — especially during the initial pairing phase when both Wi-Fi and Bluetooth are active.
 >   The problem is particularly noticeable on devices like the **Raspberry Pi Zero 2 W**.
 
@@ -84,11 +85,11 @@ From the next time onward, the system should automatically connect to your phone
 > **It is strongly recommended to change these defaults and/or disable SSH access for security reasons.**
 
 > [!NOTE]
-> **Default SSH credentials:**
-> User: `root`
-> Password: `password`
+> **Default SSH credentials:**  
+> User: `root`  
+> Password: `password`  
 >
-> **Default Wi-Fi password:**
+> **Default Wi-Fi password:**  
 > `aa-proxy-rs`
 >
 > See below for instructions on how to connect to the device's Wi-Fi network.
