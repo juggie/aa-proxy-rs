@@ -48,6 +48,16 @@ This project is currently tested and built for the following Raspberry Pi boards
 > [!NOTE]
 > **Raspberry Pi 3 B+ is _not_ supported** due to the lack of USB OTG support.
 
+> [!WARNING]
+> - **2.4GHz Wi-Fi is being deprecated by Google** and is no longer a reliable long-term solution.
+>   Newer head units with higher resolutions (e.g. Full HD displays in some Kia/Hyundai models) require **5GHz Wi-Fi** to function without .
+>   Only boards with 5GHz-capable Wi-Fi chips will be able to support full resolution.
+>   Simply changing the DPI will not solve this limitation.
+>
+> - Additionally, **2.4GHz Wi-Fi can interfere with Bluetooth**, since both operate on the same frequency band.
+>   This can occasionally cause connection issues — especially during the initial pairing phase when both Wi-Fi and Bluetooth are active.
+>   The problem is particularly noticeable on devices like the **Raspberry Pi Zero 2 W**.
+
 Work is currently in progress to support additional hardware platforms, including:
 - **AAWireless TWO** – thanks to collaboration with its creators
 - **Radxa Zero 3W**
@@ -271,8 +281,12 @@ Thanks to the power of open source, even older EVs can now enjoy modern features
 Sometimes deleting the system Bluetooth cache at /var/lib/bluetooth and restarting bluetoothd fixes persistent issues with device connectivity.
 Consider also using "Forget" of bluetooth device in the Android phone.
 
-Application by default is logging into _/var/log/aa-proxy-rs.log_ file. This log could be helpful when trying to solve issues.
-If you want to get logs out of device, read [here](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle?tab=readme-ov-file#getting-logs) how to obtain it.
+By default, the application logs to the file:
+`/var/log/aa-proxy-rs.log`
+
+This log can be useful for troubleshooting and diagnosing issues.
+
+You can easily download the log file via the [embedded web interface](#embedded-web-interface).
 
 ## Similar/other open source AndroidAuto-related projects
 - https://github.com/nisargjhaveri/WirelessAndroidAutoDongle
