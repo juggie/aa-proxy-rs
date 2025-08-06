@@ -3,150 +3,187 @@
 [![Discord](https://img.shields.io/discord/1358047273434615968?style=for-the-badge&logo=discord&logoColor=white&label=Discord&labelColor=%235865F2&color=%231825A2)](https://discord.gg/c7JKdwHyZu)
 
 ## About
-This is a Rust-Written proxy tool to bridge between wireless Android phone and a USB-wired car head unit for using Google's Android Auto.
-Currently it is intended to run as a more-or-less drop-in replacement of the `aawgd` from the [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project.
+This project is a DIY proxy tool that bridges a wireless Android phone with a USB-connected car head unit to enable the use of Android Auto.
+Originally derived from the [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project (specifically as
+a replacement for its `aawgd` component), it has since evolved into an independent and self-contained solution with its own development direction.
+
+As with the original project, our primary focus is on supporting the Raspberry Pi. However, other boards are also currently in development,
+including [AAWireless TWO](https://www.aawireless.io/en/products/aawireless-two) (thanks to collaboration with its creators)
+and the [Radxa Zero 3W](https://radxa.com/products/zeros/zero3w/).
+
+![Hardware overview](images/aa-proxy-rs.webp)
+*Sample Connection Diagram – Raspberry Pi Zero 2 W*
 
 ## Features
-- written in [Rust](https://www.rust-lang.org/): reliable code and minimized all memory related issues and bugs
-- fast: main IO loop is using modern [io_uring](https://kernel.dk/io_uring.pdf) kernel API
-- reconnecting: trying to reconnect/recover AndroidAuto connection in any possible case
-- bandwidth/transfer statistics
-- [embedded web interface](#embedded-web-interface)
-- stall transfer detection
-- [MITM (man-in-the-middle) mode](#mitm-mode) support with the following features:
+- **Reliable and safe** – written in [Rust](https://www.rust-lang.org/), minimizing memory-related bugs and crashes
+- **High performance** – uses modern [io_uring](https://kernel.dk/io_uring.pdf) kernel API for efficient I/O handling
+- **Automatic reconnection** – attempts to recover Android Auto connection in all failure scenarios
+- **Transfer monitoring** – displays bandwidth usage and real-time transfer statistics
+- **[Embedded web interface](#embedded-web-interface)** – lightweight UI for status and control
+- **Stall detection** – detects and handles stalled data transfers
+- **[MITM (Man-in-the-Middle) mode](#mitm-mode)** – supports advanced tweaks and modifications:
   - DPI change
   - Remove tap restriction
   - Disable media sink
   - Disable TTS sink
   - Video in motion
-  - Developer mode
-- [Google Maps EV Routing](#google-maps-ev-routing) support
-- Wired phone USB connection mode (without Bluetooth handshake and WiFi)
-- Google `Desktop Head Unit` emulator support for debugging purposes
+  - Enable developer mode
+- **[Google Maps EV Routing](#google-maps-ev-routing)** – allows EV-specific navigation features
+- **Wired USB phone mode** – works without the Bluetooth handshake or Wi-Fi pairing
+- **Support for Google’s Desktop Head Unit (DHU)** – ideal for debugging and development
 
 ## Current project status
-Now after a lot of stress-testing and coding I think the project has matured enough, that I can say that the main stability goal was reached.
-I am using this project almost daily in my car and trying to get rid of all issues I may encounter.<br>
-There is also great and helpful community on Discord around this project. If you want to join or ask for help/support then feel free to connect to our server: [aa-proxy-rs](https://discord.gg/c7JKdwHyZu).
+After extensive stress testing and continuous development, the project has reached a level of stability that meets its original goals.
+I now use it almost daily in my own car and continue to fix any issues that come up to ensure a smooth and reliable experience.<br>
+There's also a great and supportive community on Discord built around this project. If you'd like to join, ask questions, or get help,
+feel free to connect with us on the [aa-proxy-rs Discord](https://discord.gg/c7JKdwHyZu) server.
 
-## SD card images
-I am using Nisarg's RaspberryPi images from [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project and replacing `aawgd` with `aa-proxy-rs`.<br>
-Those images are available on the [Release page](https://github.com/manio/aa-proxy-rs/releases).<br>
-You can also find there a pure `aa-proxy-rs` binary which you can install manually on targets with similar libc versions, or build your own (read below: [Installing into target](#installing-into-target) and [Building](#building)).
+## Supported Hardware
+This project is currently tested and built for the following Raspberry Pi boards that support USB OTG:
+- Raspberry Pi Zero W
+- Raspberry Pi Zero 2 W
+- Raspberry Pi 3 A+
+- Raspberry Pi 4
 
-## History and motivation
-There are a lot of commercial solutions like AAWireless or Motorola MA1. I even bought a clone of those on AliExpress, but it ended up not working in my car (passed to my friend which has a compatible car for this).
+> [!NOTE]
+> **Raspberry Pi 3 B+ is _not_ supported** due to the lack of USB OTG support.
 
-Then thanks to [Nicnl](https://www.reddit.com/user/Nicnl/) from reddit under my [post](https://www.reddit.com/r/RenaultZoe/comments/1c5eg2g/working_wireless_aa_for_rlink1_based_zoe/),
-I headed to a great open source solution, based on Raspberry Pi hardware:<br>
-[WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) by [Nisarg Jhaveri](https://github.com/nisargjhaveri)
+Work is currently in progress to support additional hardware platforms, including:
+- **AAWireless TWO** – thanks to collaboration with its creators
+- **Radxa Zero 3W**
 
-The author made a lot of great research and created a DIY working solution, and - what is most important - he shared his work to the public.
-This is so cool and I really appreciate his work!
-Because it's open source, I was even able to run my own additional LoRa hardware on the same Raspberry Pi for different purpose!
+In theory, support can be extended to other hardware platforms in the future, as long as the following basic requirements are met:
+- USB OTG or USB Gadget mode support
+- Wi-Fi and Bluetooth (either built-in or via external adapters)
 
-The original project is using `aawgd` daemon which is doing the necessary proxying of data between the phone and USB port.
-(Un)fortunately the project was not always working reliable for me (crashing, unable to reconnect, need restarting, etc.).
-Finally after making this [PR](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle/pull/196), I decided that I will try to make the Rust-based alternative.
-And this is where this project begins and I started to reimplement the `aawgd` C++ code into rust application.
+The latest stable SD card images are available on the [Releases page](https://github.com/manio/aa-proxy-rs/releases).
 
-## Coding
-I was trying to simplify things and original code where it was possible.
-It was also a great opportunity and fun to learn how it was designed and how it is working, but I have to admit that I was struggling a lot with doing a final forwarding I/O:
-normally I would just use [copy_bidirectional](https://docs.rs/tokio/latest/tokio/io/fn.copy_bidirectional.html) for this as the whole code is async and using [tokio](https://tokio.rs/), but
-the problem with it was, that the USB socket for the "usb-gadget" kernel module seems to be not compatible with this approach (probably some polling/epoll problems).
-I was also trying to call read/writes in tokio tasks, but finally I decided to use different approach: using modern [io_uring](https://kernel.dk/io_uring.pdf) kernel API provided by [tokio_uring](https://github.com/tokio-rs/tokio-uring).
-And this finally worked perfectly fine (and also really efficient as a bonus).
+## First-time Connection
+1. Connect your phone to the car head unit using a USB cable and verify that Android Auto starts successfully. Then disconnect the phone.
+2. Connect the board to the car using a data-capable USB cable and ensure you use the USB OTG-enabled port on the board:
+   - **Raspberry Pi Zero W** and **Raspberry Pi Zero 2 W**: Use the second micro-USB port labeled "USB" (not the one labeled "PWR").
+   - **Raspberry Pi 3 A+**: Use the only USB-A port with a USB-A to USB-A cable.
+   - **Raspberry Pi 4**: Use the USB-C port normally used to power the board.
+3. Open Bluetooth settings on your phone and pair with the new device named `aa-proxy-rs-*` or `AndroidAuto-*`.
+4. After pairing, your phone should automatically connect via Wi-Fi, and the dongle will connect to the head unit via USB, starting Android Auto on the car screen.
 
-## Limitations
-- Currently only the default "connection strategy" is supported.
-- Because the project main functionality (data transfer) is dependent on kernel [io_uring](https://kernel.dk/io_uring.pdf) API, the Linux kernel has to be in version 5.10 or later.
-- My time resources are limited, so don't expect to prompt answers and ETAs on different requests. I am doing this as a hobby in my spare time.
+From the next time onward, the system should automatically connect to your phone and start Android Auto without additional steps.
 
-## Embedded web interface
-When you connect to the device's WiFi network, you can access the web interface, which is available by default at: [http://10.0.0.1](http://10.0.0.1).<br>
-Using the web interface, you can configure all settings that are also available in `/etc/aa-proxy-rs/config.toml`:<br>
+> [!WARNING]
+> For convenience during the initial setup, SSH access is enabled by default and the device uses a predefined Wi-Fi password.
+> **It is strongly recommended to change these defaults and/or disable SSH access for security reasons.**
+
+> [!NOTE]
+> **Default SSH credentials:**
+> User: `root`
+> Password: `password`
+>
+> **Default Wi-Fi password:**
+> `aa-proxy-rs`
+>
+> See below for instructions on how to connect to the device's Wi-Fi network.
+>
+> Setting these options via the web interface is planned for a future update.
+> For now, they can be configured manually in the `/etc/aawgd.conf` file.
+
+## Embedded Web Interface
+When you connect to the device's WiFi network, you can access the web interface, which is available by default at: [http://10.0.0.1](http://10.0.0.1).
+
+> [!WARNING]
+> If you want to connect to the device (e.g. via the web interface or SSH) **while Android Auto is running**, it won't be accessible from your phone. In that case, you have two options:
+> - Use a different device, such as a laptop or another phone, to connect to the device’s Wi-Fi network.
+> - Or stop Android Auto temporarily, for example by:
+>   - Enabling airplane mode, then enabling Wi-Fi only and connecting manually, **or**
+>   - Disabling both Wi-Fi and Bluetooth, waiting a moment, then re-enabling Wi-Fi and connecting manually.
+>
+> If you're still having trouble connecting, try disabling MAC address randomization.
+> [This guide](https://help.kings.edu/hc/en-us/articles/4406119218455-How-to-Disable-Randomized-MAC-Addresses-on-Android) provides clear instructions on how to do it on Android.
+
+Using the web interface, you can configure all settings that are also available in `/etc/aa-proxy-rs/config.toml`:
+
 ![Webserver preview](images/webserver.png)
+
 You can also download logs with a single click.
 
-## How it works (technical)
-![Hardware overview](images/aa-proxy-rs.webp)
-The whole connection process is not trivial and quite complex. Here I am listing the needed steps the app is doing from the start to make a connection:
-- USB: disabling all gadgets
-- USB: registering uevents (for receiving USB state changes)
-- Starting local TCP server
-- Bluetooth: powering up the bluetooth adapter and make it discoverable and pairable
-- Bluetooth: registering two profiles: one for android auto, and the other for fake headset (fooling the phone we are supported wireless AndroidAuto head unit)
-- When a phone connects to the AA profile the app is sending two frames of specific google protocol data:
-  - WifiStartRequest: with IP address and port of the destination TCP server/connection
-  - WifiInfoResponse: with Access Point information for the WiFi connection
-- after successfull response for the above, the tool is disabling bluetooth
-- the phone is connecting to car's head unit bluetooth (e.g. for phone calls)
-- in the same time the phone is connecting via WiFi to our TCP server on specified port
-- USB: switching to "default" followed by "accessory" gadgets to enable proper USB mode for data transmission to the car head unit (fooling that we are the android phone connected via USB)
-- final (and normal working stage): bidirectional forwarding the data between TCP client (phone) and USB port (car)
+## History and Motivation
+There are many commercial solutions available for wireless Android Auto, such as AAWireless or Motorola MA1. I even bought a
+clone from AliExpress — but unfortunately, it didn’t work in my car (I ended up giving it to a friend who had a compatible vehicle).
 
-USB is the active part here (starting the transmission by sending 10-bytes first frame), so all of this has to be done with well timing, i.e., if we start the USB dongle connection too fast
-(when the phone is not yet connected), then it would start the transmission, and we don't have a TCP socket ready; similar in the other direction: when the phone starts too fast, and we are
-not ready with USB connection then we can't send data to the phone and Android will close/timeout the connection.
+Thanks to [Nicnl](https://www.reddit.com/user/Nicnl/) on Reddit, who commented under [this post](https://www.reddit.com/r/RenaultZoe/comments/1c5eg2g/working_wireless_aa_for_rlink1_based_zoe/),
+I discovered a great open-source project based on Raspberry Pi hardware:
+[**WirelessAndroidAutoDongle**](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) by [Nisarg Jhaveri](https://github.com/nisargjhaveri).
+
+The author did some excellent research and created a working DIY solution — and most importantly, he shared it openly with the community.
+That’s something I truly admire and appreciate!
+
+Because the project is open source, I was even able to run additional LoRa hardware on the same Raspberry Pi for a completely different purpose.
+
+The original project uses a daemon called `aawgd`, which handles proxying data between the phone and the USB-connected head unit.
+Unfortunately (or fortunately!), the original implementation wasn’t always reliable in my case — I experienced crashes, failed reconnections,
+and the need to restart the service manually.
+
+After submitting [this pull request](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle/pull/196), I decided to create a Rust-based
+alternative to `aawgd`. That’s how this project started — by reimplementing the C++ code into a new, standalone application written in Rust.
+
+## Coding
+From the beginning, I aimed to simplify parts of the original code wherever possible.
+This project also became a great opportunity (and a lot of fun!) to dive deeper into how the system was designed and how everything works under the hood.
+
+One of the biggest challenges I faced was implementing reliable bidirectional I/O forwarding.
+Since the entire application is asynchronous and uses [Tokio](https://tokio.rs/), my first instinct was to use [`copy_bidirectional`](https://docs.rs/tokio/latest/tokio/io/fn.copy_bidirectional.html).
+However, this approach didn’t work as expected — likely due to how the USB socket for the `usb-gadget` kernel module interacts with polling/epoll mechanisms.
+
+I also experimented with running separate read/write operations inside Tokio tasks, but ultimately found a better solution:
+using the modern [io_uring](https://kernel.dk/io_uring.pdf) interface via the [`tokio_uring`](https://github.com/tokio-rs/tokio-uring) library.
+
+This approach turned out to be both highly efficient and completely stable — solving the problem in a clean and performant way.
+
+## Limitations
+- The project depends on the kernel-level [io_uring](https://kernel.dk/io_uring.pdf) API for its core data transfer functionality.
+  As a result, **Linux kernel version 5.10 or newer is required**.
+
+- Please note: I work on this project in my free time as a hobby.
+  While I do my best to respond and fix issues, I can't always guarantee quick replies or provide ETAs for requested features.
+
+## How it works (technical)
+The connection process is quite complex and involves several carefully timed steps to establish a stable link between the phone and the car head unit. Below is an overview of what the app does from start to finish:
+
+- **USB:** Disable all existing USB gadgets.
+- **USB:** Register for uevents to monitor USB state changes.
+- Start a local TCP server.
+- **Bluetooth:** Power up the Bluetooth adapter and make it discoverable and pairable.
+- **Bluetooth:** Register two profiles:
+  - One for Android Auto,
+  - One for a fake headset (to trick the phone into recognizing a wireless Android Auto head unit).
+- When a phone connects to the Android Auto profile, the app sends two frames with specific Google protocol data:
+  - `WifiStartRequest`: includes the IP address and port of the TCP server the phone should connect to.
+  - `WifiInfoResponse`: contains the Access Point information for the Wi-Fi connection.
+- After receiving a successful response, the tool disables Bluetooth.
+- The phone connects to the car’s Bluetooth (e.g., for phone calls).
+- Simultaneously, the phone connects via Wi-Fi to our TCP server on the specified port.
+- **USB:** Switch USB gadgets to “default” followed by “accessory” mode to enable proper USB data transmission to the car head unit (fooling the car into thinking the phone is connected via USB).
+- **Final stage:** Bidirectional forwarding of data between the TCP client (phone) and USB port (car).
+
+The USB side is the active initiator of data transmission, starting with sending a 10-byte first frame. Because of this, timing is critical:
+- If the USB dongle connection starts too early (before the phone is connected), the transmission begins but the TCP socket isn’t ready yet.
+- Conversely, if the phone starts too early and the USB connection is not ready, data cannot be sent to the phone, causing Android Auto to close or timeout the connection.
+
+Proper synchronization between these steps ensures a stable and reliable connection.
 
 ## Demo
 [![asciicast](https://asciinema.org/a/686949.svg)](https://asciinema.org/a/686949)
 
 ## Building
-`rpi02w` binaries build by [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) are for `arm-unknown-linux-gnueabihf` 32-bit architecture, probably
-because of usb-gadget module [incompatibility](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle/pull/129).
-To be able to properly crosscompile output binary I provided `.cargo/config.toml` with target set for this specific arch.
 
-### Dependencies
-1. [Installing Rust](https://www.rust-lang.org/tools/install)
-2. `gcc-arm-linux-gnueabihf` package is needed on Debian. This is distro-depended so I recommend to RTFM.
+If you'd like to build the SD card images yourself, head over to our Buildroot repository:<br>
+**https://github.com/aa-proxy/buildroot**
 
-To compile you need to add proper rustup target with:
-```
-rustup target add arm-unknown-linux-gnueabihf
-```
-and make sure that it is _installed_ on target list:
-```
-arm-unknown-linux-gnueabihf (installed)
-```
-and then use:
-```
-cargo build --release
-```
+There you’ll find all the necessary tools and instructions to generate custom images tailored to your hardware or specific needs.
 
-To compile a STATIC `aa-proxy-rs` binary (to be able to use it on target with older OSes and different libc versions), you need to compile with:
-```
-RUSTFLAGS='-C target-feature=+crt-static' cargo build --release
-```
+## Stand-alone Usage
 
-## Building using Docker
-To build with Docker you need to have a [buildx](https://github.com/docker/buildx) and [BuildKit](https://github.com/moby/buildkit).<br>
-Docker container is also preparing an SD card images based on [@nisargjhaveri](https://github.com/nisargjhaveri)'s [latests assets](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle/releases).
-It has to loop-mount that images, thus an insecure builder is [needed](https://docs.docker.com/reference/cli/docker/buildx/build/#allow).
-To sum it up - the following commands are needed when building for the first time:
-```
-mkdir out
-docker buildx create --use --name insecure-builder --buildkitd-flags '--allow-insecure-entitlement security.insecure'
-docker buildx build --builder insecure-builder --allow security.insecure --output out .
-```
-After successful execution the resulting `aa-proxy-rs` and SD card images will be in `out` directory.
+While the aa-proxy-rs binary is typically used as part of the prebuilt system image, it can also be run manually:
 
-## Installing into target
-If you currently using a Raspberry Pi with working _WirelessAndroidAutoDongle_, then you can also manually install `aa-proxy-rs`:
-
-You need to transfer the resulting output binary to the target filesystem and start it. I am using ssh/scp for this, but it should be also possible with `wget`.
-You can also do it "offline" by making a changes directly on the SD card: mounting system partition and make necessary changes.
-Sample [startup script](https://raw.githubusercontent.com/manio/aa-proxy-rs/refs/heads/main/contrib/S93aa-proxy-rs) is provided for convenience.
-
-Example steps:
-- put `aa-proxy-rs` into /usr/bin
-- put `S93aa-proxy-rs` into /etc/init.d
-- remove or disable /etc/init.d/S93aawgd
-
-Startup parameters (see below) are defined [here](https://github.com/manio/aa-proxy-rs/blob/main/contrib/S93aa-proxy-rs#L10).
-
-## Usage
 ```
 Usage: aa-proxy-rs [OPTIONS]
 
@@ -156,7 +193,7 @@ Options:
   -V, --version          Print version
 ```
 
-## Configuration
+## Manual configuration
 Default startup config file is [config.toml](https://github.com/manio/aa-proxy-rs/blob/main/contrib/config.toml).
 
 Configuration options are documented in comments, but these needs some more attention:<br>
@@ -206,29 +243,27 @@ Example with Google Maps, where a `Report` button is available after changing th
 |![](images/160dpi.png)|![](images/130dpi.png)
 
 ## Google Maps EV routing
-Google introduced EV routing features at [CES24](https://blog.google/products/android/android-auto-new-features-ces24/). The first cars to support this via Android Auto are the Ford Mustang Mach-E and F-150 Lightning.
+Google introduced EV routing features at [CES24](https://blog.google/products/android/android-auto-new-features-ces24/).
+The first cars to support this via Android Auto are the Ford Mustang Mach-E and F-150 Lightning.
 
 This clip shows how it works in the car:<br>
 [![This is a clip how it works in the car](https://img.youtube.com/vi/M1qf9Psu6g8/hqdefault.jpg)](https://www.youtube.com/embed/M1qf9Psu6g8)
 
 The idea of using this feature with other cars started here: https://github.com/manio/aa-proxy-rs/issues/19 in February 2025.
-After a long journey searching for someone with the knowledge and hardware that could help us obtain the logs, we finally, at the end of June 2025, thanks to [@SquidBytes](https://github.com/SquidBytes), got the sample data to analyze.
+After a long journey searching for someone with the knowledge and hardware that could help us obtain the logs, we finally, at the end of June 2025,
+thanks to [@SquidBytes](https://github.com/SquidBytes), got the sample data to analyze.
 
-Thanks to many hours of work by [@Deadknight](https://github.com/Deadknight) and [@gamelaster](https://github.com/gamelaster), we were finally able to make some use of that data.
-Unfortunately, the work is still in progress, but I am currently at a stage where, by customizing some parameters, I can provide real-time battery level data to `aa-proxy-rs`, and overall it makes correct estimates for my car.
+Thanks to many hours of work by [@Deadknight](https://github.com/Deadknight) and [@gamelaster](https://github.com/gamelaster), we were finally
+able to make some use of that data.
+Unfortunately, the work is still in progress, but I am currently at a stage where, by customizing some parameters, I can provide real-time battery
+level data to `aa-proxy-rs`, and overall it makes correct estimates for my car.
 
-`aa-proxy-rs` has an embedded REST server for obtaining battery data from any source (I am using a slightly modified version of the [canze-rs](https://github.com/manio/canze-rs) app for this purpose).
+`aa-proxy-rs` has an embedded REST server for obtaining battery data from any source (I am using a slightly modified version of the
+[canze-rs](https://github.com/manio/canze-rs) app for this purpose).
 It reads the data on the same Raspberry Pi (connecting wirelessly to the Bluetooth OBD dongle).
 
 `aa-proxy-rs` can be configured to execute a specific data collection script when Android Auto starts and needs the battery level data, and also when it stops.
 The script can be configured in `config.toml` and is executed with the arguments `start` and `stop` accordingly.
-
-Here's a `curl` example to feed the data:<br>
-```bash
-curl -X POST http://localhost:3030/battery \
-     -H "Content-Type: application/json" \
-     -d '{"battery_level": 87.5}'
-```
 
 Thanks to the power of open source, even older EVs can now enjoy modern features and a much better navigation experience!
 
