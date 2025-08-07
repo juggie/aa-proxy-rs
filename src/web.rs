@@ -47,6 +47,7 @@ pub fn app(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/config", get(get_config).post(set_config))
+        .route("/config-data", get(get_config_data))
         .route("/download", get(download_handler))
         .route("/restart", get(restart_handler))
         .route("/upload-hex-model", post(upload_hex_model_handler))
@@ -320,6 +321,11 @@ async fn upload_hex_model_handler(
 
 async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let cfg = state.config.read().await.clone();
+    Json(cfg)
+}
+
+async fn get_config_data(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let cfg = state.config_json.read().await.clone();
     Json(cfg)
 }
 
