@@ -1,6 +1,8 @@
 use bluer::Address;
+use indexmap::IndexMap;
 use serde::de::{self, Deserializer, Error as DeError, Visitor};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use simplelog::*;
 use std::{
     fmt::{self, Display},
@@ -13,6 +15,7 @@ use tokio::sync::RwLock;
 use toml_edit::{value, DocumentMut};
 
 pub type SharedConfig = Arc<RwLock<AppConfig>>;
+pub type SharedConfigJson = Arc<RwLock<ConfigJson>>;
 
 #[derive(
     clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy, Deserialize, Serialize,
@@ -99,6 +102,28 @@ fn webserver_default_bind() -> Option<String> {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
+pub struct ConfigValue {
+    pub typ: String,
+    pub description: String,
+    pub values: Option<Vec<String>>,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ConfigValues {
+    pub title: String,
+    pub values: IndexMap<String, ConfigValue>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ConfigJson {
+    pub titles: Vec<ConfigValues>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct AppConfig {
     pub advertise: bool,
     pub dongle_mode: bool,
@@ -144,6 +169,31 @@ pub struct AppConfig {
     pub restart_requested: bool,
 }
 
+impl Default for ConfigValue {
+    fn default() -> Self {
+        Self {
+            typ: String::new(),
+            description: String::new(),
+            values: None,
+        }
+    }
+}
+
+impl Default for ConfigValues {
+    fn default() -> Self {
+        Self {
+            title: String::new(),
+            values: IndexMap::new(),
+        }
+    }
+}
+
+impl Default for ConfigJson {
+    fn default() -> Self {
+        Self { titles: Vec::new() }
+    }
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -182,6 +232,8 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    const CONFIG_JSON: &str = include_str!("../static/config.json");
+
     pub fn load(config_file: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         use ::config::File;
         let file_config: AppConfig = ::config::Config::builder()
@@ -249,5 +301,10 @@ impl AppConfig {
         }
 
         let _ = fs::write(config_file, doc.to_string());
+    }
+
+    pub fn load_config_json() -> Result<ConfigJson, Box<dyn std::error::Error>> {
+        let parsed: ConfigJson = serde_json::from_str(Self::CONFIG_JSON)?;
+        Ok(parsed)
     }
 }
