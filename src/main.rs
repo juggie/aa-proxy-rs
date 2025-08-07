@@ -161,6 +161,13 @@ fn logging_init(debug: bool, disable_console_debug: bool, log_path: &PathBuf) {
     }
 }
 
+async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_started: Arc<Notify>) {
+    if let Some(ref mut usb) = usb {
+        usb.enable_default_and_wait_for_accessory(accessory_started)
+            .await;
+    }
+}
+
 async fn tokio_main(
     config: SharedConfig,
     config_json: SharedConfigJson,
@@ -224,6 +231,8 @@ async fn tokio_main(
             config.read().await.udc.clone(),
         ));
     }
+
+    let change_usb_order = config.read().await.change_usb_order;
     loop {
         if let Some(ref mut usb) = usb {
             if let Err(e) = usb.init() {
@@ -232,6 +241,11 @@ async fn tokio_main(
         }
 
         let mut bt_stop = None;
+
+        if change_usb_order {
+            enable_usb_if_present(&mut usb, accessory_started.clone()).await;
+        }
+
         if let Some(ref wifi_conf) = wifi_conf {
             loop {
                 match bluetooth_setup_connection(
@@ -260,9 +274,8 @@ async fn tokio_main(
             }
         }
 
-        if let Some(ref mut usb) = usb {
-            usb.enable_default_and_wait_for_accessory(accessory_started.clone())
-                .await;
+        if !change_usb_order {
+            enable_usb_if_present(&mut usb, accessory_started.clone()).await;
         }
 
         if let Some(bt_stop) = bt_stop {
