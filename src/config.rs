@@ -160,6 +160,8 @@ pub struct AppConfig {
     pub wired: Option<UsbId>,
     pub dhu: bool,
     pub ev: bool,
+    pub remove_bluetooth: bool,
+    pub remove_wifi: bool,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub ev_battery_logger: Option<PathBuf>,
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -224,6 +226,8 @@ impl Default for AppConfig {
             wired: None,
             dhu: false,
             ev: false,
+            remove_bluetooth: false,
+            remove_wifi: false,
             ev_battery_logger: None,
             restart_requested: false,
             ev_connector_types: None,
@@ -293,6 +297,8 @@ impl AppConfig {
         );
         doc["dhu"] = value(self.dhu);
         doc["ev"] = value(self.ev);
+        doc["remove_bluetooth"] = value(self.remove_bluetooth);
+        doc["remove_wifi"] = value(self.remove_wifi);
         if let Some(path) = &self.ev_battery_logger {
             doc["ev_battery_logger"] = value(path.display().to_string());
         }

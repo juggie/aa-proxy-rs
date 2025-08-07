@@ -269,6 +269,8 @@ pub async fn pkt_modify_hook(
     remove_tap_restriction: bool,
     video_in_motion: bool,
     ev: bool,
+    remove_bluetooth: bool,
+    remove_wifi: bool,
     ctx: &mut ModifyContext,
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
     ev_battery_logger: Option<PathBuf>,
@@ -442,6 +444,15 @@ pub async fn pkt_modify_hook(
                     get_name(proxy_type),
                     control.unwrap(),
                 );
+            }
+
+            if remove_bluetooth {
+                msg.services.retain(|svc| svc.bluetooth_service.is_none());
+            }
+
+            if remove_wifi {
+                msg.services
+                    .retain(|svc| svc.wifi_projection_service.is_none());
             }
 
             // EV routing features
@@ -803,6 +814,8 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 config.remove_tap_restriction,
                 config.video_in_motion,
                 config.ev,
+                config.remove_bluetooth,
+                config.remove_wifi,
                 &mut ctx,
                 sensor_channel.clone(),
                 config.ev_battery_logger.clone(),
@@ -849,6 +862,8 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                         config.remove_tap_restriction,
                         config.video_in_motion,
                         config.ev,
+                        config.remove_bluetooth,
+                        config.remove_wifi,
                         &mut ctx,
                         sensor_channel.clone(),
                         config.ev_battery_logger.clone(),

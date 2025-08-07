@@ -129,6 +129,14 @@
         "developer_mode": {
           "typ": "boolean",
           "description": "Developer mode"
+        },
+        "remove_bluetooth": {
+          "typ": "boolean",
+          "description": "Remove Bluetooth service from `service discovery response`"
+        },
+        "remove_wifi": {
+          "typ": "boolean",
+          "description": "Remove Wi-Fi service from `service discovery response`"
         }
       }
     },
