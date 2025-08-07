@@ -1,6 +1,6 @@
 [build]
 #set default target
-target = "arm-unknown-linux-gnueabihf"
+target = "aarch64-unknown-linux-gnu"
 
-[target.arm-unknown-linux-gnueabihf]
-linker = "arm-linux-gnueabihf-gcc"
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
