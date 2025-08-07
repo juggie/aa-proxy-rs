@@ -1,5 +1,7 @@
 use crate::config::AppConfig;
+use crate::config::ConfigJson;
 use crate::config::SharedConfig;
+use crate::config::SharedConfigJson;
 use crate::ev::send_ev_data;
 use crate::ev::BatteryData;
 use crate::ev::EV_MODEL_FILE;
@@ -14,6 +16,7 @@ use axum::{
 };
 use chrono::Local;
 use hyper::body::to_bytes;
+use regex::Regex;
 use simplelog::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -34,6 +37,7 @@ const NAME: &str = "<i><bright-black> web: </>";
 #[derive(Clone)]
 pub struct AppState {
     pub config: SharedConfig,
+    pub config_json: SharedConfigJson,
     pub config_file: Arc<PathBuf>,
     pub tx: Arc<Mutex<Option<Sender<Packet>>>>,
     pub sensor_channel: Arc<Mutex<Option<u8>>>,
@@ -88,14 +92,88 @@ fn linkify_git_info(git_date: &str, git_hash: &str) -> String {
     }
 }
 
-async fn index() -> impl IntoResponse {
+fn replace_backticks(s: String) -> String {
+    let re = Regex::new(r"`([^`]*)`").unwrap();
+    re.replace_all(&s, "<code>$1</code>").to_string()
+}
+
+pub fn render_config_values(config: &ConfigJson) -> String {
+    let mut html = String::new();
+
+    for section in &config.titles {
+        // Section header row
+        html.push_str(&format!(
+            r#"<tr>
+                 <td colspan="2" style="color: #fff; background-color: #202632">
+                   <strong>{}</strong>
+                 </td>
+               </tr>"#,
+            section.title,
+        ));
+
+        for (key, val) in &section.values {
+            let input_html = match val.typ.as_str() {
+                "string" => format!(r#"<input type="text" id="{key}" />"#),
+                "integer" => format!(r#"<input type="number" id="{key}" />"#),
+                "boolean" => format!(r#"<input type="checkbox" role="switch" id="{key}" />"#),
+                "select" => {
+                    // Render a <select> with options if they exist
+                    if let Some(options) = &val.values {
+                        let options_html = options
+                            .iter()
+                            .map(|opt| format!(r#"<option value="{opt}">{opt}</option>"#))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        format!(r#"<select id="{key}">{options_html}</select>"#)
+                    } else {
+                        // fallback to text input if no options provided
+                        format!(r#"<input type="text" id="{key}" />"#)
+                    }
+                }
+                _ => format!(r#"<input type="text" id="{key}" />"#),
+            };
+
+            let desc = replace_backticks(val.description.replace("\n", "<br>"));
+            html.push_str(&format!(
+                r#"<tr>
+                     <td><label for="{key}">{key}</label></td>
+                     <td>
+                       {input_html}<br/>
+                       <small>{desc}</small>
+                     </td>
+                   </tr>"#,
+            ));
+        }
+    }
+
+    html
+}
+
+pub fn render_config_ids(config: &ConfigJson) -> String {
+    let mut all_keys = Vec::new();
+
+    for section in &config.titles {
+        for key in section.values.keys() {
+            all_keys.push(format!(r#""{key}""#));
+        }
+    }
+
+    format!("{}", all_keys.join(", "))
+}
+
+async fn index(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let config_json_guard = state.config_json.read().await;
+    let config_json = &*config_json_guard;
+
     let html = TEMPLATE
         .replace("{BUILD_DATE}", env!("BUILD_DATE"))
         .replace(
             "{GIT_INFO}",
             &linkify_git_info(env!("GIT_DATE"), env!("GIT_HASH")),
         )
-        .replace("{PICO_CSS}", PICO_CSS);
+        .replace("{PICO_CSS}", PICO_CSS)
+        .replace("{CONFIG_VALUES}", &render_config_values(config_json))
+        .replace("{CONFIG_IDS}", &render_config_ids(config_json));
     Html(html)
 }
 
