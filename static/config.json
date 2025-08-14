@@ -75,7 +75,7 @@
         },
         "btalias": {
           "typ": "string",
-          "description": "BLE device name (how your bluetooth device is visible)\nby default it is `WirelessAADongle-CPUSERIAL`\nfor dongle mode you need to set it to: `AndroidAuto-xxxxx`"
+          "description": "BLE device name (how your bluetooth device is visible)\nby default it is `aa-proxy-rs-CPUSERIAL`\nfor dongle mode you need to set it to: `AndroidAuto-xxxxx`"
         },
         "connect": {
           "typ": "string",

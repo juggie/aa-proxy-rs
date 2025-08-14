@@ -44,7 +44,7 @@
   dongle_mode = false
 
   # BLE device name (how your bluetooth device is visible)
-  # by default it is WirelessAADongle-CPUSERIAL
+  # by default it is aa-proxy-rs-CPUSERIAL
   # for dongle mode you need to set it to: AndroidAuto-xxxxx
   btalias = ""
 
