@@ -22,7 +22,9 @@ use simplelog::*;
 use usb_gadget::uevent_listener;
 use usb_gadget::UsbGadgetState;
 
+use std::fs;
 use std::fs::OpenOptions;
+use std::io::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -295,6 +297,11 @@ async fn tokio_main(
     }
 }
 
+/// Returns the SBC model string (currently supports only Raspberry Pi)
+pub fn get_sbc_model() -> Result<String> {
+    fs::read_to_string("/sys/firmware/devicetree/base/model")
+}
+
 fn main() {
     let started = Instant::now();
 
@@ -312,6 +319,11 @@ fn main() {
         env!("GIT_DATE"),
         env!("GIT_HASH")
     );
+
+    // show SBC model
+    if let Ok(model) = get_sbc_model() {
+        info!("{} 📟 SBC model: <bold><blue>{}</>", NAME, model);
+    }
 
     // check and display config
     if args.config.exists() {
