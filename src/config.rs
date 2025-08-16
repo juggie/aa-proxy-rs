@@ -206,7 +206,7 @@ impl Default for AppConfig {
             hexdump_level: HexdumpLevel::Disabled,
             disable_console_debug: false,
             legacy: true,
-            connect: None,
+            connect: Some(Address::from_str("00:00:00:00:00:00").unwrap()),
             logfile: "/var/log/aa-proxy-rs.log".into(),
             stats_interval: 0,
             udc: None,
