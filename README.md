@@ -205,7 +205,7 @@ Options:
 ```
 
 ## Manual configuration
-Default startup config file is [config.toml](https://github.com/manio/aa-proxy-rs/blob/main/contrib/config.toml).
+Default startup config file is `/etc/aa-proxy-rs/config.toml`.
 
 Configuration options are documented in comments, but these needs some more attention:<br>
 - `legacy`<br>
@@ -219,7 +219,7 @@ In short: if you have problems with USB connection try to enable the legacy mode
 By default without this option the aa-proxy-rs is starting but it is only visible as a bluetooth dongle, to which you have to connect manually from your phone to
 initiate AndroidAuto connection. If I am correct this was called `dongle mode` in `aawgd`.<br>
 If you provide `connect` option with default `00:00:00:00:00:00` wildcard address, then the daemon is trying to connect to known (paired?) bluetooth devices (phones) in a loop
-(the **bluetoothd** have a cached list of recently connected devices in /var/lib/bluetooth). This is the default mode for `aawgd` for the time I am writing this.<br>
+(the **bluetoothd** have a cached list of recently connected devices in /var/lib/bluetooth).<br>
 If you set this option to specific `MAC_ADDRESS` where MAC_ADDRESS is the MAC of your phone (bluetooth), then the aa-proxy-rs will try to connect only to this specified device
 in a loop (ignoring all **bluetoothd** cached devices).
 
