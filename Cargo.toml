@@ -10,6 +10,7 @@ readme = 'README.md'
 categories = ['command-line-utilities']
 homepage = 'https://github.com/manio/aa-proxy-rs'
 repository = 'https://github.com/manio/aa-proxy-rs'
+default-run = "aa-proxy-rs"
 
 [dependencies]
 dbus = { version = "0.9.7", features = ["vendored"] }
