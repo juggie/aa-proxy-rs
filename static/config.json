@@ -1,6 +1,15 @@
 {
   "titles": [
     {
+      "title": "📶 SYSTEM / WIFI CONFIGURATION",
+      "values": {
+        "enable_ssh": {
+          "typ": "boolean",
+          "description": "Enable SSH server"
+        }
+      }
+    },
+    {
       "title": "⚙️ GENERAL OPTIONS",
       "values": {
         "logfile": {

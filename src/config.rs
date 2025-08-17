@@ -167,6 +167,7 @@ pub struct AppConfig {
     pub ev_battery_logger: Option<PathBuf>,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub ev_connector_types: Option<String>,
+    pub enable_ssh: bool,
 
     #[serde(skip)]
     pub restart_requested: bool,
@@ -233,6 +234,7 @@ impl Default for AppConfig {
             ev_battery_logger: None,
             restart_requested: false,
             ev_connector_types: None,
+            enable_ssh: true,
         }
     }
 }
@@ -308,6 +310,7 @@ impl AppConfig {
         if let Some(ev_connector_types) = &self.ev_connector_types {
             doc["ev_connector_types"] = value(ev_connector_types);
         }
+        doc["enable_ssh"] = value(self.enable_ssh);
 
         let _ = fs::write(config_file, doc.to_string());
     }
