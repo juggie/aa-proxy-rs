@@ -14,6 +14,8 @@ use std::{
 use tokio::sync::RwLock;
 use toml_edit::{value, DocumentMut};
 
+// Device identity (Bluetooth alias + SSID)
+pub const IDENTITY_NAME: &str = "aa-proxy";
 pub const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
 pub const TCP_SERVER_PORT: i32 = 5288;
 pub const TCP_DHU_PORT: i32 = 5277;

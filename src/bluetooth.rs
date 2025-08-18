@@ -1,4 +1,5 @@
 use crate::config::WifiConfig;
+use crate::config::IDENTITY_NAME;
 use bluer::adv::Advertisement;
 use bluer::{
     adv::AdvertisementHandle,
@@ -34,7 +35,6 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 const AAWG_PROFILE_UUID: Uuid = Uuid::from_u128(0x4de17a0052cb11e6bdf40800200c9a66);
 const HSP_HS_UUID: Uuid = Uuid::from_u128(0x0000110800001000800000805f9b34fb);
 const HSP_AG_UUID: Uuid = Uuid::from_u128(0x0000111200001000800000805f9b34fb);
-const BT_ALIAS: &str = "aa-proxy-rs";
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(u16)]
@@ -79,8 +79,8 @@ async fn power_up_and_wait_for_connection(
     // setting BT alias for further use
     let alias = match btalias {
         None => match get_cpu_serial_number_suffix().await {
-            Ok(suffix) => format!("{}-{}", BT_ALIAS, suffix),
-            Err(_) => String::from(BT_ALIAS),
+            Ok(suffix) => format!("{}-{}", IDENTITY_NAME, suffix),
+            Err(_) => String::from(IDENTITY_NAME),
         },
         Some(btalias) => btalias,
     };
