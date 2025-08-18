@@ -183,6 +183,11 @@ pub struct AppConfig {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub ev_connector_types: Option<String>,
     pub enable_ssh: bool,
+    pub hw_mode: String,
+    pub country_code: String,
+    pub channel: u8,
+    pub ssid: String,
+    pub wpa_passphrase: String,
 
     #[serde(skip)]
     pub restart_requested: bool,
@@ -250,6 +255,11 @@ impl Default for AppConfig {
             restart_requested: false,
             ev_connector_types: None,
             enable_ssh: true,
+            hw_mode: "g".to_string(),
+            country_code: "US".to_string(),
+            channel: 6,
+            ssid: String::from(IDENTITY_NAME),
+            wpa_passphrase: String::from(IDENTITY_NAME),
         }
     }
 }
@@ -326,6 +336,11 @@ impl AppConfig {
             doc["ev_connector_types"] = value(ev_connector_types);
         }
         doc["enable_ssh"] = value(self.enable_ssh);
+        doc["hw_mode"] = value(&self.hw_mode);
+        doc["country_code"] = value(&self.country_code);
+        doc["channel"] = value(self.channel as i64);
+        doc["ssid"] = value(&self.ssid);
+        doc["wpa_passphrase"] = value(&self.wpa_passphrase);
 
         let _ = fs::write(config_file, doc.to_string());
     }

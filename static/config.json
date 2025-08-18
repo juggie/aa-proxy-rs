@@ -6,6 +6,26 @@
         "enable_ssh": {
           "typ": "boolean",
           "description": "Enable SSH server"
+        },
+        "hw_mode": {
+          "typ": "string",
+          "description": "Wi-Fi operation mode:\n`a` = IEEE 802.11a (5 GHz),\n`b` = IEEE 802.11b (2.4 GHz),\n`g` = IEEE 802.11g (2.4 GHz)"
+        },
+        "country_code": {
+          "typ": "string",
+          "description": "Wi-Fi Country code (ISO/IEC 3166-1). Used to set regulatory domain. Set as needed to indicate country in which device is operating. This can limit available channels and transmit power."
+        },
+        "channel": {
+          "typ": "integer",
+          "description": "Wi-Fi Channel number (IEEE 802.11)"
+        },
+        "ssid": {
+          "typ": "string",
+          "description": "Wi-Fi SSID"
+        },
+        "wpa_passphrase": {
+          "typ": "string",
+          "description": "Wi-Fi password used as the WPA pre-shared key (WPA-PSK)"
         }
       }
     },
