@@ -14,8 +14,21 @@ use std::{
 use tokio::sync::RwLock;
 use toml_edit::{value, DocumentMut};
 
+pub const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
+pub const TCP_SERVER_PORT: i32 = 5288;
+pub const TCP_DHU_PORT: i32 = 5277;
+
 pub type SharedConfig = Arc<RwLock<AppConfig>>;
 pub type SharedConfigJson = Arc<RwLock<ConfigJson>>;
+
+#[derive(Clone)]
+pub struct WifiConfig {
+    pub ip_addr: String,
+    pub port: i32,
+    pub ssid: String,
+    pub bssid: String,
+    pub wpa_key: String,
+}
 
 #[derive(
     clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy, Deserialize, Serialize,

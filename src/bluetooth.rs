@@ -1,4 +1,4 @@
-use crate::WifiConfig;
+use crate::config::WifiConfig;
 use bluer::adv::Advertisement;
 use bluer::{
     adv::AdvertisementHandle,

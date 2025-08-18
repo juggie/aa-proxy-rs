@@ -33,13 +33,13 @@ pub const BUFFER_LEN: usize = 16 * 1024;
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
 use crate::config::SharedConfig;
+use crate::config::{TCP_DHU_PORT, TCP_SERVER_PORT};
 use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
 use crate::mitm::Packet;
 use crate::mitm::ProxyType;
 use crate::usb_stream;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
-use crate::{TCP_DHU_PORT, TCP_SERVER_PORT};
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
 // read and write calls:

@@ -11,6 +11,8 @@ mod web;
 use crate::config::AppConfig;
 use crate::config::SharedConfig;
 use crate::config::SharedConfigJson;
+use crate::config::WifiConfig;
+use crate::config::{DEFAULT_WLAN_ADDR, TCP_SERVER_PORT};
 use crate::mitm::Packet;
 use bluetooth::bluetooth_setup_connection;
 use bluetooth::bluetooth_stop;
@@ -40,10 +42,6 @@ use tokio::sync::RwLock;
 // module name for logging engine
 const NAME: &str = "<i><bright-black> main: </>";
 
-const DEFAULT_WLAN_ADDR: &str = "10.0.0.1";
-const TCP_SERVER_PORT: i32 = 5288;
-const TCP_DHU_PORT: i32 = 5277;
-
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
 #[clap(version, long_about = None, about = format!(
@@ -61,15 +59,6 @@ struct Args {
         default_value = "/etc/aa-proxy-rs/config.toml"
     )]
     config: PathBuf,
-}
-
-#[derive(Clone)]
-struct WifiConfig {
-    ip_addr: String,
-    port: i32,
-    ssid: String,
-    bssid: String,
-    wpa_key: String,
 }
 
 fn init_wifi_config(iface: &str, hostapd_conf: PathBuf) -> WifiConfig {
