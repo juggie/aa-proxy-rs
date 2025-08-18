@@ -199,9 +199,10 @@ While the aa-proxy-rs binary is typically used as part of the prebuilt system im
 Usage: aa-proxy-rs [OPTIONS]
 
 Options:
-  -c, --config <CONFIG>  Config file path [default: /etc/aa-proxy-rs/config.toml]
-  -h, --help             Print help
-  -V, --version          Print version
+  -c, --config <CONFIG>         Config file path [default: /etc/aa-proxy-rs/config.toml]
+  -g, --generate-system-config  Generate system config and exit
+  -h, --help                    Print help
+  -V, --version                 Print version
 ```
 
 ## Manual configuration

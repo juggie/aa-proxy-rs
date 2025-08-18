@@ -41,6 +41,8 @@ use tokio::sync::RwLock;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> main: </>";
+const HOSTAPD_CONF_IN: &str = "/etc/hostapd.conf.in";
+const HOSTAPD_CONF_OUT: &str = "/var/run/hostapd.conf";
 
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
@@ -59,6 +61,10 @@ struct Args {
         default_value = "/etc/aa-proxy-rs/config.toml"
     )]
     config: PathBuf,
+
+    /// Generate system config and exit
+    #[clap(short, long)]
+    generate_system_config: bool,
 }
 
 fn init_wifi_config(iface: &str, hostapd_conf: PathBuf) -> WifiConfig {
@@ -291,6 +297,41 @@ pub fn get_sbc_model() -> Result<String> {
     fs::read_to_string("/sys/firmware/devicetree/base/model")
 }
 
+fn render_template(template: &str, vars: &[(&str, &str)]) -> String {
+    let mut output = template.to_string();
+    for (key, value) in vars {
+        let placeholder = format!("{{{{{}}}}}", key);
+        output = output.replace(&placeholder, value);
+    }
+    output
+}
+
+fn generate_hostapd_conf(config: AppConfig) -> std::io::Result<()> {
+    info!(
+        "{} 🗃️ Generating config from input template: <bold><green>{}</>",
+        NAME, HOSTAPD_CONF_IN
+    );
+
+    let template = fs::read_to_string(HOSTAPD_CONF_IN)?;
+
+    let rendered = render_template(
+        &template,
+        &[
+            ("HW_MODE", &config.hw_mode),
+            ("COUNTRY_CODE", &config.country_code),
+            ("CHANNEL", &config.channel.to_string()),
+            ("SSID", &config.ssid),
+            ("WPA_PASSPHRASE", &config.wpa_passphrase),
+        ],
+    );
+
+    info!(
+        "{} 💾 Saving generated file as: <bold><green>{}</>",
+        NAME, HOSTAPD_CONF_OUT
+    );
+    fs::write(HOSTAPD_CONF_OUT, rendered)
+}
+
 fn main() {
     let started = Instant::now();
 
@@ -308,6 +349,12 @@ fn main() {
         env!("GIT_DATE"),
         env!("GIT_HASH")
     );
+
+    // generate system configs from template and exit
+    if args.generate_system_config {
+        generate_hostapd_conf(config).expect("error generating config from template");
+        return;
+    }
 
     // show SBC model
     if let Ok(model) = get_sbc_model() {
