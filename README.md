@@ -36,7 +36,7 @@ and the [Radxa Zero 3W](https://radxa.com/products/zeros/zero3w/).
 After extensive stress testing and continuous development, the project has reached a level of stability that meets its original goals.
 I now use it almost daily in my own car and continue to fix any issues that come up to ensure a smooth and reliable experience.<br>
 There's also a great and supportive community on Discord built around this project. If you'd like to join, ask questions, or get help,
-feel free to connect with us on the [aa-proxy-rs Discord](https://discord.gg/c7JKdwHyZu) server.
+feel free to connect with us on the [aa-proxy Discord](https://discord.gg/c7JKdwHyZu) server.
 
 ## Supported Hardware
 This project is currently tested and built for the following Raspberry Pi boards that support USB OTG:
@@ -75,7 +75,7 @@ The latest stable SD card images are available on the [Releases page](https://gi
    - **Raspberry Pi Zero W** and **Raspberry Pi Zero 2 W**: Use the second micro-USB port labeled "USB" (not the one labeled "PWR").
    - **Raspberry Pi 3 A+**: Use the only USB-A port with a USB-A to USB-A cable.
    - **Raspberry Pi 4**: Use the USB-C port normally used to power the board.
-3. Open Bluetooth settings on your phone and pair with the new device named `aa-proxy-rs-*` or `AndroidAuto-*`.
+3. Open Bluetooth settings on your phone and pair with the new device named `aa-proxy-*`.
 4. After pairing, your phone should automatically connect via Wi-Fi, and the dongle will connect to the head unit via USB, starting Android Auto on the car screen.
 
 From the next time onward, the system should automatically connect to your phone and start Android Auto without additional steps.
@@ -85,17 +85,15 @@ From the next time onward, the system should automatically connect to your phone
 > **It is strongly recommended to change these defaults and/or disable SSH access for security reasons.**
 
 > [!NOTE]
-> **Default SSH credentials:**  
+> 📶 **Default Wi-Fi credentials:**  
+> SSID: `aa-proxy`  
+> WPA password: `aa-proxy`  
+>
+> 🔐 **Default SSH credentials:**  
 > User: `root`  
 > Password: `password`  
 >
-> **Default Wi-Fi password:**  
-> `aa-proxy-rs`
->
 > See below for instructions on how to connect to the device's Wi-Fi network.
->
-> Setting these options via the web interface is planned for a future update.
-> For now, they can be configured manually in the `/etc/aawgd.conf` file.
 
 ## Embedded Web Interface
 When you connect to the device's WiFi network, you can access the web interface, which is available by default at: [http://10.0.0.1](http://10.0.0.1).
