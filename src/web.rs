@@ -50,6 +50,7 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/config-data", get(get_config_data))
         .route("/download", get(download_handler))
         .route("/restart", get(restart_handler))
+        .route("/reboot", get(reboot_handler))
         .route("/upload-hex-model", post(upload_hex_model_handler))
         .route("/battery", post(battery_handler))
         .with_state(state)
@@ -228,6 +229,15 @@ async fn restart_handler(State(state): State<Arc<AppState>>) -> impl IntoRespons
     Response::builder()
         .status(StatusCode::OK)
         .body(Body::from("Restart has been requested"))
+        .unwrap()
+}
+
+async fn reboot_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    state.config.write().await.restart_requested = true;
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from("Reboot has been requested"))
         .unwrap()
 }
 
