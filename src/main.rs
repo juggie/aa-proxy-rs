@@ -8,10 +8,10 @@ mod usb_gadget;
 mod usb_stream;
 mod web;
 
-use crate::config::AppConfig;
 use crate::config::SharedConfig;
 use crate::config::SharedConfigJson;
 use crate::config::WifiConfig;
+use crate::config::{Action, AppConfig};
 use crate::config::{DEFAULT_WLAN_ADDR, TCP_SERVER_PORT};
 use crate::mitm::Packet;
 use bluetooth::bluetooth_setup_connection;
@@ -28,6 +28,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Result;
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Builder;
@@ -43,6 +44,7 @@ use tokio::sync::RwLock;
 const NAME: &str = "<i><bright-black> main: </>";
 const HOSTAPD_CONF_IN: &str = "/etc/hostapd.conf.in";
 const HOSTAPD_CONF_OUT: &str = "/var/run/hostapd.conf";
+const REBOOT_CMD: &str = "/sbin/reboot";
 
 /// AndroidAuto wired/wireless proxy
 #[derive(Parser, Debug)]
@@ -165,15 +167,31 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_start
     }
 }
 
+async fn action_handler(config: &mut SharedConfig) -> Result<()> {
+    // check pending action
+    let action = config.read().await.action_requested.clone();
+    if let Some(action) = action {
+        // check if we need to reboot
+        if action == Action::Reboot {
+            config.write().await.action_requested = None;
+            info!("{} 🔁 Rebooting now!", NAME);
+            let _ = Command::new(REBOOT_CMD).spawn();
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        }
+    }
+
+    Ok(())
+}
+
 async fn tokio_main(
-    config: SharedConfig,
+    mut config: SharedConfig,
     config_json: SharedConfigJson,
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
     config_file: PathBuf,
     tx: Arc<Mutex<Option<Sender<Packet>>>>,
     sensor_channel: Arc<Mutex<Option<u8>>>,
-) {
+) -> Result<()> {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
@@ -231,6 +249,9 @@ async fn tokio_main(
 
     let change_usb_order = config.read().await.change_usb_order;
     loop {
+        // check if we need to reboot
+        action_handler(&mut config).await?;
+
         if let Some(ref mut usb) = usb {
             if let Err(e) = usb.init() {
                 error!("{} 🔌 USB init error: {}", NAME, e);
@@ -245,6 +266,9 @@ async fn tokio_main(
 
         if let Some(ref wifi_conf) = wifi_conf {
             loop {
+                // check if we need to reboot
+                action_handler(&mut config).await?;
+
                 match bluetooth_setup_connection(
                     config.read().await.advertise,
                     config.read().await.dongle_mode,
@@ -282,6 +306,9 @@ async fn tokio_main(
 
         // wait for restart
         need_restart.notified().await;
+
+        // check if we need to reboot
+        action_handler(&mut config).await?;
 
         // TODO: make proper main loop with cancelation
         info!(
