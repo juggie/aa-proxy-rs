@@ -32,7 +32,7 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::SharedConfig;
+use crate::config::{Action, SharedConfig};
 use crate::config::{TCP_DHU_PORT, TCP_SERVER_PORT};
 use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
@@ -162,10 +162,14 @@ async fn transfer_monitor(
             stall_tcp_bytes_last = tcp_bytes_out;
         }
 
-        // check if we need to restart
-        if config.read().await.restart_requested {
-            config.write().await.restart_requested = false;
-            return Err("config reload request => restarting connection".into());
+        // check pending action
+        let action = config.read().await.action_requested.clone();
+        if let Some(action) = action {
+            // check if we need to restart or reboot
+            if action == Action::Reconnect {
+                config.write().await.action_requested = None;
+            }
+            return Err(format!("action request: {:?}", action).into());
         }
 
         sleep(Duration::from_millis(100)).await;

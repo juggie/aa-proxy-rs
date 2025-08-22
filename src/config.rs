@@ -23,6 +23,12 @@ pub const TCP_DHU_PORT: i32 = 5277;
 pub type SharedConfig = Arc<RwLock<AppConfig>>;
 pub type SharedConfigJson = Arc<RwLock<ConfigJson>>;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Action {
+    Reconnect,
+    Reboot,
+}
+
 #[derive(Clone)]
 pub struct WifiConfig {
     pub ip_addr: String,
@@ -190,7 +196,7 @@ pub struct AppConfig {
     pub wpa_passphrase: String,
 
     #[serde(skip)]
-    pub restart_requested: bool,
+    pub action_requested: Option<Action>,
 }
 
 impl Default for ConfigValue {
@@ -252,7 +258,7 @@ impl Default for AppConfig {
             remove_wifi: false,
             change_usb_order: false,
             ev_battery_logger: None,
-            restart_requested: false,
+            action_requested: None,
             ev_connector_types: None,
             enable_ssh: true,
             hw_mode: "g".to_string(),

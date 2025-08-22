@@ -1,3 +1,4 @@
+use crate::config::Action;
 use crate::config::AppConfig;
 use crate::config::ConfigJson;
 use crate::config::SharedConfig;
@@ -224,7 +225,7 @@ fn generate_filename() -> String {
 }
 
 async fn restart_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    state.config.write().await.restart_requested = true;
+    state.config.write().await.action_requested = Some(Action::Reconnect);
 
     Response::builder()
         .status(StatusCode::OK)
@@ -233,7 +234,7 @@ async fn restart_handler(State(state): State<Arc<AppState>>) -> impl IntoRespons
 }
 
 async fn reboot_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    state.config.write().await.restart_requested = true;
+    state.config.write().await.action_requested = Some(Action::Reboot);
 
     Response::builder()
         .status(StatusCode::OK)
