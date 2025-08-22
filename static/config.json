@@ -189,6 +189,15 @@
           "description": "List of EV connector types supported by your car. Possible values (separate multiple with a comma ','):\nEV_CONNECTOR_TYPE_J1772, EV_CONNECTOR_TYPE_MENNEKES, EV_CONNECTOR_TYPE_CHADEMO, EV_CONNECTOR_TYPE_COMBO_1, EV_CONNECTOR_TYPE_COMBO_2, EV_CONNECTOR_TYPE_TESLA_SUPERCHARGER, EV_CONNECTOR_TYPE_GBT\n\nIf left empty, the default is EV_CONNECTOR_TYPE_MENNEKES."
         }
       }
+    },
+    {
+      "title": "🧰 DEVELOPER OPTIONS",
+      "values": {
+        "eth_mode": {
+          "typ": "string",
+          "description": "Configure Ethernet mode (optional). Options:\n- `DHCP` (case-insensitive): dynamic IP assignment\n- Static IP: e.g. `192.168.100.1/24`\n- Leave blank to disable"
+        }
+      }
     }
   ]
 }
