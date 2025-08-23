@@ -345,6 +345,13 @@ fn generate_hostapd_conf(config: AppConfig) -> std::io::Result<()> {
         &template,
         &[
             ("HW_MODE", &config.hw_mode),
+            ("AC_MODE", {
+                if config.hw_mode == "a" {
+                    "1"
+                } else {
+                    "0"
+                }
+            }),
             ("COUNTRY_CODE", &config.country_code),
             ("CHANNEL", &config.channel.to_string()),
             ("SSID", &config.ssid),
