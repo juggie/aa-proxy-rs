@@ -62,7 +62,17 @@ pub fn generate_config<P: AsRef<Path>>(output_path: P) -> Result<(), Box<dyn std
                     _ => r#""""#.to_string(),
                 });
 
-            output.push_str(&format!("  {} = {}\n\n", key, default));
+            // These values are generated at runtime on the actual device,
+            // so we comment them out during config generation;
+            // otherwise, we might accidentally force incorrect values.
+            let commented: &str = {
+                if key == "hw_mode" || key == "channel" {
+                    "#"
+                } else {
+                    ""
+                }
+            };
+            output.push_str(&format!("  {}{} = {}\n\n", commented, key, default));
         }
     }
 
