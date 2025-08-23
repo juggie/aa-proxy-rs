@@ -4,6 +4,7 @@ use serde::de::{self, Deserializer, Error as DeError, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use simplelog::*;
+use std::process::Command;
 use std::{
     fmt::{self, Display},
     fs,
@@ -224,8 +225,27 @@ impl Default for ConfigJson {
     }
 }
 
+fn supports_5ghz_wifi() -> std::io::Result<bool> {
+    // Run the command `iw list`
+    let output = Command::new("iw").arg("list").output()?;
+
+    // Convert the command output bytes to a string
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Iterate over each line in the output
+    for line in stdout.lines() {
+        // Check if the line contains expected freq
+        if line.contains("5180.0 MHz") {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
+        let band_a = supports_5ghz_wifi().unwrap_or(false);
         Self {
             advertise: false,
             dongle_mode: false,
@@ -261,9 +281,22 @@ impl Default for AppConfig {
             action_requested: None,
             ev_connector_types: None,
             enable_ssh: true,
-            hw_mode: "g".to_string(),
+            hw_mode: {
+                if band_a {
+                    "a"
+                } else {
+                    "g"
+                }
+            }
+            .to_string(),
             country_code: "US".to_string(),
-            channel: 6,
+            channel: {
+                if band_a {
+                    36
+                } else {
+                    6
+                }
+            },
             ssid: String::from(IDENTITY_NAME),
             wpa_passphrase: String::from(IDENTITY_NAME),
         }
