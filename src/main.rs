@@ -321,7 +321,10 @@ async fn tokio_main(
 
 /// Returns the SBC model string (currently supports only Raspberry Pi)
 pub fn get_sbc_model() -> Result<String> {
-    fs::read_to_string("/sys/firmware/devicetree/base/model")
+    Ok(fs::read_to_string("/sys/firmware/devicetree/base/model")?
+        .trim_end_matches(char::from(0))
+        .trim()
+        .to_string())
 }
 
 fn render_template(template: &str, vars: &[(&str, &str)]) -> String {
