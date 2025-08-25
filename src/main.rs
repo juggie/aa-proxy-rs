@@ -195,7 +195,8 @@ async fn tokio_main(
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
-    if let Some(ref bindaddr) = config.read().await.webserver {
+    let cfg = config.read().await.clone();
+    if let Some(ref bindaddr) = cfg.webserver {
         // preparing AppState and starting webserver
         let state = web::AppState {
             config: config.clone(),
@@ -226,28 +227,22 @@ async fn tokio_main(
     }
 
     let wifi_conf = {
-        if !config.read().await.wired.is_some() {
-            Some(init_wifi_config(
-                &config.read().await.iface,
-                config.read().await.hostapd_conf.clone(),
-            ))
+        if !cfg.wired.is_some() {
+            Some(init_wifi_config(&cfg.iface, cfg.hostapd_conf.clone()))
         } else {
             None
         }
     };
     let mut usb = None;
-    if !config.read().await.dhu {
-        if config.read().await.legacy {
+    if !cfg.dhu {
+        if cfg.legacy {
             // start uevent listener in own task
             std::thread::spawn(|| uevent_listener(accessory_started_cloned));
         }
-        usb = Some(UsbGadgetState::new(
-            config.read().await.legacy,
-            config.read().await.udc.clone(),
-        ));
+        usb = Some(UsbGadgetState::new(cfg.legacy, cfg.udc.clone()));
     }
 
-    let change_usb_order = config.read().await.change_usb_order;
+    let change_usb_order = cfg.change_usb_order;
     loop {
         // check if we need to reboot
         action_handler(&mut config).await?;
