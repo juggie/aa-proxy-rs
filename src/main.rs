@@ -269,15 +269,18 @@ async fn tokio_main(
                 // check if we need to reboot
                 action_handler(&mut config).await?;
 
+                // read and clone the effective config in advance to avoid holding the lock
+                let cfg = config.read().await.clone();
+
                 match bluetooth_setup_connection(
-                    config.read().await.advertise,
-                    config.read().await.dongle_mode,
-                    config.read().await.btalias.clone(),
-                    config.read().await.connect,
+                    cfg.advertise,
+                    cfg.dongle_mode,
+                    cfg.btalias,
+                    cfg.connect,
                     wifi_conf.clone(),
                     tcp_start.clone(),
-                    config.read().await.keepalive,
-                    Duration::from_secs(config.read().await.bt_timeout_secs.into()),
+                    cfg.keepalive,
+                    Duration::from_secs(cfg.bt_timeout_secs.into()),
                 )
                 .await
                 {
