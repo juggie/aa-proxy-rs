@@ -203,6 +203,22 @@ Options:
   -V, --version                 Print version
 ```
 
+> [!WARNING]
+> Kernel Requirements for Stand-alone Usage
+>
+> If you plan to run **aa-proxy-rs** on your own system (outside of the provided system images), be aware that additional **custom kernel modules** are required for full functionality. These modules are not upstreamed and must be built separately.
+
+You can find the necessary patches here:  
+👉 **[https://github.com/aa-proxy/buildroot/tree/main/external/patches/linux](https://github.com/aa-proxy/buildroot/tree/main/external/patches/linux)**
+
+Please keep this in mind when creating your own custom solution with `aa-proxy-rs`.
+
+To achieve full functionality similar to the official Buildroot-based images, make sure the following kernel options are enabled as well:
+- CONFIG_USB_CONFIGFS_UEVENT
+- CONFIG_USB_CONFIGFS_F_ACC
+- CONFIG_BT_RFCOMM
+- CONFIG_BT_RFCOMM_TTY
+
 ## Manual configuration
 Default startup config file is `/etc/aa-proxy-rs/config.toml`.
 
