@@ -30,7 +30,7 @@ and the [Radxa Zero 3W](https://radxa.com/products/zeros/zero3w/).
   - Enable developer mode
 - **[Google Maps EV Routing](#google-maps-ev-routing)** – allows EV-specific navigation features
 - **Wired USB phone mode** – works without the Bluetooth handshake or Wi-Fi pairing
-- **Support for Google’s Desktop Head Unit (DHU)** – ideal for debugging and development
+- **[Support for Google’s Desktop Head Unit (DHU)](#connecting-to-desktop-head-unit-dhu)** – ideal for debugging and development
 
 ## Current project status
 After extensive stress testing and continuous development, the project has reached a level of stability that meets its original goals.
@@ -179,6 +179,52 @@ By default, the application logs to the file:
 This log can be useful for troubleshooting and diagnosing issues.
 
 You can easily download the log file via the [embedded web interface](#embedded-web-interface).
+
+## Connecting to Desktop Head Unit (DHU)
+
+You can test and use **aa-proxy-rs** with Google's **Desktop Head Unit (DHU)** in two ways:
+
+#### 1. Using a physical Raspberry Pi
+
+This method allows you to test with actual hardware and `aa-proxy-rs` running directly on the device. The flow then looks like this:
+
+**[📱 Android Phone] ⇄ [📶 BT+WiFi] ⇄ [📟 RPi with aa-proxy-rs] ⇄ [🔌 USB] ⇄ [🖥️ PC with DHU]**
+
+Steps:
+
+- Connect the Raspberry Pi to your PC or laptop running Linux or macOS (depending on where DHU is installed)
+- Pair your Android phone with the Raspberry Pi over Bluetooth
+- After pairing and connection, you should see a USB device appear on your host system. Use `dmesg` to confirm:
+```
+[Mon Aug 25 15:24:43 2025] usb 3-1: new high-speed USB device number 84 using xhci_hcd
+[Mon Aug 25 15:24:43 2025] usb 3-1: New USB device found, idVendor=18d1, idProduct=2d00, bcdDevice= 6.12
+[Mon Aug 25 15:24:43 2025] usb 3-1: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+[Mon Aug 25 15:24:43 2025] usb 3-1: Product: aa-proxy-rs
+[Mon Aug 25 15:24:43 2025] usb 3-1: Manufacturer: My Own
+[Mon Aug 25 15:24:43 2025] usb 3-1: SerialNumber: 0123456
+```
+
+- Then launch DHU with:  
+`desktop-head-unit --usb=0123456`
+
+#### 2. Without Raspberry Pi (host-only testing)
+
+If you want to run the `aa-proxy-rs` application itself for development or functional testing — without using a physical Raspberry Pi — you can build and run it **natively** on the same platform where DHU is running (Linux/macOS).
+
+In this setup, we recommend using the `wired` option in the config, which enables a USB-based connection between your phone and host machine. The flow then looks like this:
+
+**[📱 Android Phone] ⇄ [🔌 USB] ⇄ [💻 PC with aa-proxy-rs] ⇄ [🖥️ DHU]**
+
+To make this work, follow these steps:
+
+1. In the `aa-proxy-rs` configuration:
+   - Enable the `dhu` option
+   - Enable the `wired` option and provide your phone's **VID:PID** (vendor ID and product ID)
+2. Compile and launch `aa-proxy-rs` on your host
+3. Connect your Android phone via USB  
+   *(Note: you may need to unlock the screen after connecting)*
+4. `aa-proxy-rs` should detect and connect to the phone, then wait for DHU to connect
+5. Launch DHU **without any arguments**: `desktop-head-unit`
 
 ## History and Motivation
 There are many commercial solutions available for wireless Android Auto, such as AAWireless or Motorola MA1. I even bought a
