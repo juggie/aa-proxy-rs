@@ -167,7 +167,7 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_start
     }
 }
 
-async fn action_handler(config: &mut SharedConfig) -> Result<()> {
+async fn action_handler(config: &mut SharedConfig) {
     // check pending action
     let action = config.read().await.action_requested.clone();
     if let Some(action) = action {
@@ -179,12 +179,10 @@ async fn action_handler(config: &mut SharedConfig) -> Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(60)).await;
         }
     }
-
-    Ok(())
 }
 
 async fn tokio_main(
-    mut config: SharedConfig,
+    config: SharedConfig,
     config_json: SharedConfigJson,
     need_restart: Arc<Notify>,
     tcp_start: Arc<Notify>,
@@ -242,11 +240,17 @@ async fn tokio_main(
         usb = Some(UsbGadgetState::new(cfg.legacy, cfg.udc.clone()));
     }
 
+    // spawn a background task for reboot detection
+    let mut config_cloned = config.clone();
+    let _ = tokio::spawn(async move {
+        loop {
+            action_handler(&mut config_cloned).await;
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    });
+
     let change_usb_order = cfg.change_usb_order;
     loop {
-        // check if we need to reboot
-        action_handler(&mut config).await?;
-
         if let Some(ref mut usb) = usb {
             if let Err(e) = usb.init() {
                 error!("{} 🔌 USB init error: {}", NAME, e);
@@ -261,9 +265,6 @@ async fn tokio_main(
 
         if let Some(ref wifi_conf) = wifi_conf {
             loop {
-                // check if we need to reboot
-                action_handler(&mut config).await?;
-
                 // read and clone the effective config in advance to avoid holding the lock
                 let cfg = config.read().await.clone();
 
@@ -304,9 +305,6 @@ async fn tokio_main(
 
         // wait for restart
         need_restart.notified().await;
-
-        // check if we need to reboot
-        action_handler(&mut config).await?;
 
         // TODO: make proper main loop with cancelation
         info!(
