@@ -114,6 +114,72 @@ Using the web interface, you can configure all settings that are also available 
 
 You can also download logs with a single click.
 
+## MITM mode
+Man-in-the-middle mode support has been added recently. This is the mode which allows to change the data passed between the HU and the phone.
+Separate encrypted connections are made to each device to be able to see or modify the data passed between HU and MD.<br>
+This is opening new possibilities like, e.g., forcing HU to specific DPI, adding EV capabilities to HU/cars which doesn't support this Google Maps feature.<br>
+All the above is not currently supported but should be possible and easier with this mode now implemented.<br>
+To have this mode working you need enable `mitm` option in configuration and provide certificate and private key for communication for both ends/devices.
+Default directory where the keys are search for is: `/etc/aa-proxy-rs/`, and the following file set needs to be there:<br>
+- hu_key.pem
+- hu_cert.pem
+- md_key.pem
+- md_cert.pem
+- galroot_cert.pem
+
+I will not add these files into this repository to avoid potential problems. You can find it in other places, or even other git repos, like:<br>
+- https://github.com/tomasz-grobelny/AACS/tree/master/AAServer/ssl
+- https://github.com/tomasz-grobelny/AACS/tree/master/AAClient/ssl
+- https://github.com/lucalewin/vehiculum/tree/main/src/server/cert
+- https://github.com/lucalewin/vehiculum/tree/main/src/client/cert
+- https://github.com/borconi/headunit/blob/master/jni/hu_ssl.h#L29
+
+Special thanks to [@gamelaster](https://github.com/gamelaster/) for the help, support and his [OpenGAL Proxy](https://github.com/gamelaster/opengal_proxy) project.
+
+### DPI settings
+Thanks to above MITM mode a DPI setting of the car HU can be forced/replaced. This way we can change the hardcoded value to our own. This is allowing to view more data (at cost of readability/font size).<br>
+Example with Google Maps, where a `Report` button is available after changing this value:
+
+|160 DPI (default)|130 DPI|
+|---|---|
+|![](images/160dpi.png)|![](images/130dpi.png)
+
+## Google Maps EV routing
+Google introduced EV routing features at [CES24](https://blog.google/products/android/android-auto-new-features-ces24/).
+The first cars to support this via Android Auto are the Ford Mustang Mach-E and F-150 Lightning.
+
+This clip shows how it works in the car:<br>
+[![This is a clip how it works in the car](https://img.youtube.com/vi/M1qf9Psu6g8/hqdefault.jpg)](https://www.youtube.com/embed/M1qf9Psu6g8)
+
+The idea of using this feature with other cars started here: https://github.com/manio/aa-proxy-rs/issues/19 in February 2025.
+After a long journey searching for someone with the knowledge and hardware that could help us obtain the logs, we finally, at the end of June 2025,
+thanks to [@SquidBytes](https://github.com/SquidBytes), got the sample data to analyze.
+
+Thanks to many hours of work by [@Deadknight](https://github.com/Deadknight) and [@gamelaster](https://github.com/gamelaster), we were finally
+able to make some use of that data.
+Unfortunately, the work is still in progress, but I am currently at a stage where, by customizing some parameters, I can provide real-time battery
+level data to `aa-proxy-rs`, and overall it makes correct estimates for my car.
+
+`aa-proxy-rs` has an embedded REST server for obtaining battery data from any source (I am using a slightly modified version of the
+[canze-rs](https://github.com/manio/canze-rs) app for this purpose).
+It reads the data on the same Raspberry Pi (connecting wirelessly to the Bluetooth OBD dongle).
+
+`aa-proxy-rs` can be configured to execute a specific data collection script when Android Auto starts and needs the battery level data, and also when it stops.
+The script can be configured in `config.toml` and is executed with the arguments `start` and `stop` accordingly.
+
+Thanks to the power of open source, even older EVs can now enjoy modern features and a much better navigation experience!
+
+## Troubleshooting
+Sometimes deleting the system Bluetooth cache at /var/lib/bluetooth and restarting bluetoothd fixes persistent issues with device connectivity.
+Consider also using "Forget" of bluetooth device in the Android phone.
+
+By default, the application logs to the file:
+`/var/log/aa-proxy-rs.log`
+
+This log can be useful for troubleshooting and diagnosing issues.
+
+You can easily download the log file via the [embedded web interface](#embedded-web-interface).
+
 ## History and Motivation
 There are many commercial solutions available for wireless Android Auto, such as AAWireless or Motorola MA1. I even bought a
 clone from AliExpress — but unfortunately, it didn’t work in my car (I ended up giving it to a friend who had a compatible vehicle).
@@ -182,6 +248,25 @@ Proper synchronization between these steps ensures a stable and reliable connect
 ## Demo
 [![asciicast](https://asciinema.org/a/686949.svg)](https://asciinema.org/a/686949)
 
+## Manual configuration
+Default startup config file is `/etc/aa-proxy-rs/config.toml`.
+
+Configuration options are documented in comments, but these needs some more attention:<br>
+- `legacy`<br>
+Original `aawgd` is using two USB gadgets: **default** and **accessory**. When connecting to car headunit, it switches first to **default** then to **accessory**.
+During my development I found out that my car headunit doesn't need this switching. It is working fine connecting directly to **accessory** gadget.
+Moreover with this approach it is much faster and doesn't need to wait for USB events in dedicated _UEvent_ thread. As the result I decided to leave the old (legacy)
+code under this switch for compatibility with some headunits.<br>
+In short: if you have problems with USB connection try to enable the legacy mode.
+
+- `connect`<br>
+By default without this option the aa-proxy-rs is starting but it is only visible as a bluetooth dongle, to which you have to connect manually from your phone to
+initiate AndroidAuto connection. If I am correct this was called `dongle mode` in `aawgd`.<br>
+If you provide `connect` option with default `00:00:00:00:00:00` wildcard address, then the daemon is trying to connect to known (paired?) bluetooth devices (phones) in a loop
+(the **bluetoothd** have a cached list of recently connected devices in /var/lib/bluetooth).<br>
+If you set this option to specific `MAC_ADDRESS` where MAC_ADDRESS is the MAC of your phone (bluetooth), then the aa-proxy-rs will try to connect only to this specified device
+in a loop (ignoring all **bluetoothd** cached devices).
+
 ## Building
 
 If you'd like to build the SD card images yourself, head over to our Buildroot repository:<br>
@@ -218,91 +303,6 @@ To achieve full functionality similar to the official Buildroot-based images, ma
 - CONFIG_USB_CONFIGFS_F_ACC
 - CONFIG_BT_RFCOMM
 - CONFIG_BT_RFCOMM_TTY
-
-## Manual configuration
-Default startup config file is `/etc/aa-proxy-rs/config.toml`.
-
-Configuration options are documented in comments, but these needs some more attention:<br>
-- `legacy`<br>
-Original `aawgd` is using two USB gadgets: **default** and **accessory**. When connecting to car headunit, it switches first to **default** then to **accessory**.
-During my development I found out that my car headunit doesn't need this switching. It is working fine connecting directly to **accessory** gadget.
-Moreover with this approach it is much faster and doesn't need to wait for USB events in dedicated _UEvent_ thread. As the result I decided to leave the old (legacy)
-code under this switch for compatibility with some headunits.<br>
-In short: if you have problems with USB connection try to enable the legacy mode.
-
-- `connect`<br>
-By default without this option the aa-proxy-rs is starting but it is only visible as a bluetooth dongle, to which you have to connect manually from your phone to
-initiate AndroidAuto connection. If I am correct this was called `dongle mode` in `aawgd`.<br>
-If you provide `connect` option with default `00:00:00:00:00:00` wildcard address, then the daemon is trying to connect to known (paired?) bluetooth devices (phones) in a loop
-(the **bluetoothd** have a cached list of recently connected devices in /var/lib/bluetooth).<br>
-If you set this option to specific `MAC_ADDRESS` where MAC_ADDRESS is the MAC of your phone (bluetooth), then the aa-proxy-rs will try to connect only to this specified device
-in a loop (ignoring all **bluetoothd** cached devices).
-
-## MITM mode
-Man-in-the-middle mode support has been added recently. This is the mode which allows to change the data passed between the HU and the phone.
-Separate encrypted connections are made to each device to be able to see or modify the data passed between HU and MD.<br>
-This is opening new possibilities like, e.g., forcing HU to specific DPI, adding EV capabilities to HU/cars which doesn't support this Google Maps feature.<br>
-All the above is not currently supported but should be possible and easier with this mode now implemented.<br>
-To have this mode working you need enable `mitm` option in configuration and provide certificate and private key for communication for both ends/devices.
-Default directory where the keys are search for is: `/etc/aa-proxy-rs/`, and the following file set needs to be there:<br>
-- hu_key.pem
-- hu_cert.pem
-- md_key.pem
-- md_cert.pem
-- galroot_cert.pem
-
-I will not add these files into this repository to avoid potential problems. You can find it in other places, or even other git repos, like:<br>
-- https://github.com/tomasz-grobelny/AACS/tree/master/AAServer/ssl
-- https://github.com/tomasz-grobelny/AACS/tree/master/AAClient/ssl
-- https://github.com/lucalewin/vehiculum/tree/main/src/server/cert
-- https://github.com/lucalewin/vehiculum/tree/main/src/client/cert
-- https://github.com/borconi/headunit/blob/master/jni/hu_ssl.h#L29
-
-Special thanks to [@gamelaster](https://github.com/gamelaster/) for the help, support and his [OpenGAL Proxy](https://github.com/gamelaster/opengal_proxy) project.
-
-### DPI settings
-Thanks to above MITM mode a DPI setting of the car HU can be forced/replaced. This way we can change the hardcoded value to our own. This is allowing to view more data (at cost of readability/font size).<br>
-Example with Google Maps, where a `Report` button is available after changing this value:
-
-|160 DPI (default)|130 DPI|
-|---|---|
-|![](images/160dpi.png)|![](images/130dpi.png)
-
-## Google Maps EV routing
-Google introduced EV routing features at [CES24](https://blog.google/products/android/android-auto-new-features-ces24/).
-The first cars to support this via Android Auto are the Ford Mustang Mach-E and F-150 Lightning.
-
-This clip shows how it works in the car:<br>
-[![This is a clip how it works in the car](https://img.youtube.com/vi/M1qf9Psu6g8/hqdefault.jpg)](https://www.youtube.com/embed/M1qf9Psu6g8)
-
-The idea of using this feature with other cars started here: https://github.com/manio/aa-proxy-rs/issues/19 in February 2025.
-After a long journey searching for someone with the knowledge and hardware that could help us obtain the logs, we finally, at the end of June 2025,
-thanks to [@SquidBytes](https://github.com/SquidBytes), got the sample data to analyze.
-
-Thanks to many hours of work by [@Deadknight](https://github.com/Deadknight) and [@gamelaster](https://github.com/gamelaster), we were finally
-able to make some use of that data.
-Unfortunately, the work is still in progress, but I am currently at a stage where, by customizing some parameters, I can provide real-time battery
-level data to `aa-proxy-rs`, and overall it makes correct estimates for my car.
-
-`aa-proxy-rs` has an embedded REST server for obtaining battery data from any source (I am using a slightly modified version of the
-[canze-rs](https://github.com/manio/canze-rs) app for this purpose).
-It reads the data on the same Raspberry Pi (connecting wirelessly to the Bluetooth OBD dongle).
-
-`aa-proxy-rs` can be configured to execute a specific data collection script when Android Auto starts and needs the battery level data, and also when it stops.
-The script can be configured in `config.toml` and is executed with the arguments `start` and `stop` accordingly.
-
-Thanks to the power of open source, even older EVs can now enjoy modern features and a much better navigation experience!
-
-## Troubleshooting
-Sometimes deleting the system Bluetooth cache at /var/lib/bluetooth and restarting bluetoothd fixes persistent issues with device connectivity.
-Consider also using "Forget" of bluetooth device in the Android phone.
-
-By default, the application logs to the file:
-`/var/log/aa-proxy-rs.log`
-
-This log can be useful for troubleshooting and diagnosing issues.
-
-You can easily download the log file via the [embedded web interface](#embedded-web-interface).
 
 ## Similar/other open source AndroidAuto-related projects
 - https://github.com/nisargjhaveri/WirelessAndroidAutoDongle
