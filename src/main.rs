@@ -91,12 +91,15 @@ fn init_wifi_config(iface: &str, hostapd_conf: PathBuf) -> WifiConfig {
     }
 
     let bssid = mac_address::mac_address_by_name(iface)
-        .unwrap()
-        .unwrap()
+        .expect(&format!("mac_address_by_name for {:?}", iface))
+        .expect(&format!("No MAC address found for interface: {:?}", iface))
         .to_string();
 
     // Create a new config from hostapd.conf
-    let hostapd = Config::new().file(hostapd_conf).unwrap();
+    let hostapd = Config::new().file(&hostapd_conf).expect(&format!(
+        "Unable to open hostapd config: {:?}",
+        hostapd_conf
+    ));
 
     // read SSID and WPA_KEY
     let ssid = &hostapd.get_str("ssid").unwrap();
