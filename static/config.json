@@ -170,6 +170,10 @@
         "remove_wifi": {
           "typ": "boolean",
           "description": "Remove Wi-Fi service from `service discovery response`"
+        },
+        "stop_on_disconnect": {
+          "typ": "boolean",
+          "description": "Stop working on manual `Disconnect` from phone"
         }
       }
     },
