@@ -344,7 +344,7 @@ pub async fn pkt_modify_hook(
         }
     }
 
-    if pkt.channel != 0 || proxy_type == ProxyType::MobileDevice {
+    if pkt.channel != 0 {
         return Ok(false);
     }
     // trying to obtain an Enum from message_id
@@ -357,6 +357,10 @@ pub async fn pkt_modify_hook(
     // parsing data
     match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
         MESSAGE_SERVICE_DISCOVERY_RESPONSE => {
+            // rewrite HeadUnit message only, exit if it is MobileDevice
+            if proxy_type == ProxyType::MobileDevice {
+                return Ok(false);
+            }
             let mut msg = ServiceDiscoveryResponse::parse_from_bytes(data)?;
 
             // DPI
