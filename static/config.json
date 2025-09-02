@@ -174,6 +174,10 @@
         "stop_on_disconnect": {
           "typ": "boolean",
           "description": "Stop working on manual `Disconnect` from phone"
+        },
+        "waze_lht_workaround": {
+          "typ": "boolean",
+          "description": "Enable `Waze` workaround for LHT (Left-Hand Traffic) countries by swaping U_TURN_LEFT to U_TURN_RIGHT in navigation / HUD"
         }
       }
     },
