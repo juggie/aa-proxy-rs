@@ -266,6 +266,7 @@ pub async fn pkt_modify_hook(
     ctx: &mut ModifyContext,
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
     cfg: &AppConfig,
+    config: &mut SharedConfig,
 ) -> Result<bool> {
     // if for some reason we have too small packet, bail out
     if pkt.payload.len() < 2 {
@@ -667,7 +668,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     tx: Sender<Packet>,
     mut rx: Receiver<Packet>,
     mut rxr: Receiver<Packet>,
-    config: SharedConfig,
+    mut config: SharedConfig,
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
 ) -> Result<()> {
     let cfg = config.read().await.clone();
@@ -804,9 +805,15 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
         if let Ok(mut pkt) = rx.try_recv() {
-            let handled =
-                pkt_modify_hook(proxy_type, &mut pkt, &mut ctx, sensor_channel.clone(), &cfg)
-                    .await?;
+            let handled = pkt_modify_hook(
+                proxy_type,
+                &mut pkt,
+                &mut ctx,
+                sensor_channel.clone(),
+                &cfg,
+                &mut config,
+            )
+            .await?;
             let _ = pkt_debug(
                 proxy_type,
                 HexdumpLevel::DecryptedOutput,
@@ -843,6 +850,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                         &mut ctx,
                         sensor_channel.clone(),
                         &cfg,
+                        &mut config,
                     )
                     .await?;
                     let _ = pkt_debug(
