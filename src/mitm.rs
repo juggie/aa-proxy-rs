@@ -17,6 +17,7 @@ use tokio_uring::buf::BoundedBuf;
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+use crate::mitm::protos::navigation_maneuver::NavigationType::*;
 use crate::mitm::protos::*;
 use crate::mitm::sensor_source_service::Sensor;
 use crate::mitm::AudioStreamType::*;
@@ -59,6 +60,7 @@ const KEYS_PATH: &str = "/etc/aa-proxy-rs";
 
 pub struct ModifyContext {
     sensor_channel: Option<u8>,
+    nav_channel: Option<u8>,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -335,6 +337,40 @@ pub async fn pkt_modify_hook(
         }
     }
 
+    // apply waze workaround on navigation data
+    if let Some(ch) = ctx.nav_channel {
+        // check for channel and a specific packet header only
+        if ch == pkt.channel
+            && proxy_type == ProxyType::MobileDevice
+            && pkt.payload[0] == 0x80
+            && pkt.payload[1] == 0x06
+            && pkt.payload[2] == 0x0A
+        {
+            if let Ok(mut msg) = NavigationState::parse_from_bytes(&data) {
+                if msg.steps[0].maneuver.type_() == U_TURN_LEFT {
+                    msg.steps[0]
+                        .maneuver
+                        .as_mut()
+                        .unwrap()
+                        .set_type(U_TURN_RIGHT);
+                    info!(
+                        "{} swapped U_TURN_LEFT to U_TURN_RIGHT",
+                        get_name(proxy_type)
+                    );
+
+                    // rewrite payload to new message contents
+                    pkt.payload = msg.write_to_bytes()?;
+                    // inserting 2 bytes of message_id at the beginning
+                    pkt.payload.insert(0, (message_id >> 8) as u8);
+                    pkt.payload.insert(1, (message_id & 0xff) as u8);
+                    return Ok(false);
+                }
+            }
+            // end navigation service processing
+            return Ok(false);
+        }
+    }
+
     if pkt.channel != 0 {
         return Ok(false);
     }
@@ -429,6 +465,18 @@ pub async fn pkt_modify_hook(
                     // set in REST server context for remote EV requests
                     let mut sc_lock = sensor_channel.lock().await;
                     *sc_lock = Some(svc.id() as u8);
+                }
+            }
+
+            // save navigation channel in context
+            if cfg.waze_lht_workaround {
+                if let Some(svc) = msg
+                    .services
+                    .iter()
+                    .find(|svc| svc.navigation_status_service.is_some())
+                {
+                    // set in local context
+                    ctx.nav_channel = Some(svc.id() as u8);
                 }
             }
 
@@ -814,6 +862,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     // main data processing/transfer loop
     let mut ctx = ModifyContext {
         sensor_channel: None,
+        nav_channel: None,
     };
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
