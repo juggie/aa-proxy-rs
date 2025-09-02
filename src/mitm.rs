@@ -339,9 +339,9 @@ pub async fn pkt_modify_hook(
                 }
                 _ => (),
             }
+            // end sensors processing
+            return Ok(false);
         }
-        // end sensors processing
-        return Ok(false);
     }
 
     if pkt.channel != 0 || proxy_type == ProxyType::MobileDevice {
