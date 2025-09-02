@@ -4,7 +4,6 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{Read, Write};
-use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -27,8 +26,8 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
-use crate::config::AppConfig;
 use crate::config::HexdumpLevel;
+use crate::config::{AppConfig, SharedConfig};
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
@@ -264,19 +263,9 @@ pub async fn pkt_debug(
 pub async fn pkt_modify_hook(
     proxy_type: ProxyType,
     pkt: &mut Packet,
-    dpi: u16,
-    developer_mode: bool,
-    disable_media_sink: bool,
-    disable_tts_sink: bool,
-    remove_tap_restriction: bool,
-    video_in_motion: bool,
-    ev: bool,
-    remove_bluetooth: bool,
-    remove_wifi: bool,
     ctx: &mut ModifyContext,
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
-    ev_battery_logger: Option<PathBuf>,
-    connector_types: Option<String>,
+    cfg: &AppConfig,
 ) -> Result<bool> {
     // if for some reason we have too small packet, bail out
     if pkt.payload.len() < 2 {
@@ -314,7 +303,7 @@ pub async fn pkt_modify_hook(
                             *pkt = reply;
 
                             // start EV battery logger if neded
-                            if let Some(ref path) = ev_battery_logger {
+                            if let Some(ref path) = cfg.ev_battery_logger {
                                 let _ = Command::new(path).arg("start").spawn();
                             }
 
@@ -325,7 +314,7 @@ pub async fn pkt_modify_hook(
                 }
                 SENSOR_MESSAGE_BATCH => {
                     if let Ok(mut msg) = SensorBatch::parse_from_bytes(data) {
-                        if video_in_motion {
+                        if cfg.video_in_motion {
                             if !msg.driving_status_data.is_empty() {
                                 // forcing status to 0 value
                                 msg.driving_status_data[0].set_status(0);
@@ -364,7 +353,7 @@ pub async fn pkt_modify_hook(
             let mut msg = ServiceDiscoveryResponse::parse_from_bytes(data)?;
 
             // DPI
-            if dpi > 0 {
+            if cfg.dpi > 0 {
                 if let Some(svc) = msg
                     .services
                     .iter_mut()
@@ -374,19 +363,19 @@ pub async fn pkt_modify_hook(
                     let prev_val = svc.media_sink_service.video_configs[0].density();
                     // set new value
                     svc.media_sink_service.as_mut().unwrap().video_configs[0]
-                        .set_density(dpi.into());
+                        .set_density(cfg.dpi.into());
                     info!(
                         "{} <yellow>{:?}</>: replacing DPI value: from <b>{}</> to <b>{}</>",
                         get_name(proxy_type),
                         control.unwrap(),
                         prev_val,
-                        dpi
+                        cfg.dpi
                     );
                 }
             }
 
             // disable tts sink
-            if disable_tts_sink {
+            if cfg.disable_tts_sink {
                 while let Some(svc) = msg.services.iter_mut().find(|svc| {
                     !svc.media_sink_service.audio_configs.is_empty()
                         && svc.media_sink_service.audio_type() == AUDIO_STREAM_GUIDANCE
@@ -404,7 +393,7 @@ pub async fn pkt_modify_hook(
             }
 
             // disable media sink
-            if disable_media_sink {
+            if cfg.disable_media_sink {
                 msg.services
                     .retain(|svc| svc.media_sink_service.audio_type() != AUDIO_STREAM_MEDIA);
                 info!(
@@ -415,7 +404,7 @@ pub async fn pkt_modify_hook(
             }
 
             // save sensor channel in context
-            if ev || video_in_motion {
+            if cfg.ev || cfg.video_in_motion {
                 if let Some(svc) = msg
                     .services
                     .iter()
@@ -430,7 +419,7 @@ pub async fn pkt_modify_hook(
             }
 
             // remove tap restriction by removing SENSOR_SPEED
-            if remove_tap_restriction {
+            if cfg.remove_tap_restriction {
                 if let Some(svc) = msg
                     .services
                     .iter_mut()
@@ -445,7 +434,7 @@ pub async fn pkt_modify_hook(
             }
 
             // enabling developer mode
-            if developer_mode {
+            if cfg.developer_mode {
                 msg.set_make("Google".into());
                 msg.set_model("Desktop Head Unit".into());
                 info!(
@@ -455,17 +444,17 @@ pub async fn pkt_modify_hook(
                 );
             }
 
-            if remove_bluetooth {
+            if cfg.remove_bluetooth {
                 msg.services.retain(|svc| svc.bluetooth_service.is_none());
             }
 
-            if remove_wifi {
+            if cfg.remove_wifi {
                 msg.services
                     .retain(|svc| svc.wifi_projection_service.is_none());
             }
 
             // EV routing features
-            if ev {
+            if cfg.ev {
                 if let Some(svc) = msg
                     .services
                     .iter_mut()
@@ -487,16 +476,17 @@ pub async fn pkt_modify_hook(
                         .supported_fuel_types = vec![FuelType::FUEL_TYPE_ELECTRIC.into()];
 
                     // supported connector types
-                    let connectors: Vec<EnumOrUnknown<EvConnectorType>> = match connector_types {
-                        Some(types) => types
-                            .split(',')
-                            .filter_map(|s| EvConnectorType::from_str(s.trim()))
-                            .map(EnumOrUnknown::new)
-                            .collect(),
-                        None => {
-                            vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()]
-                        }
-                    };
+                    let connectors: Vec<EnumOrUnknown<EvConnectorType>> =
+                        match &cfg.ev_connector_types {
+                            Some(types) => types
+                                .split(',')
+                                .filter_map(|s| EvConnectorType::from_str(s.trim()))
+                                .map(EnumOrUnknown::new)
+                                .collect(),
+                            None => {
+                                vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()]
+                            }
+                        };
                     svc.sensor_source_service
                         .as_mut()
                         .unwrap()
@@ -677,11 +667,12 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     tx: Sender<Packet>,
     mut rx: Receiver<Packet>,
     mut rxr: Receiver<Packet>,
-    config: AppConfig,
+    config: SharedConfig,
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
 ) -> Result<()> {
-    let passthrough = !config.mitm;
-    let hex_requested = config.hexdump_level;
+    let cfg = config.read().await.clone();
+    let passthrough = !cfg.mitm;
+    let hex_requested = cfg.hexdump_level;
 
     // in full_frames/passthrough mode we only directly pass packets from one endpoint to the other
     if passthrough {
@@ -813,24 +804,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     loop {
         // handling data from opposite device's thread, which needs to be transmitted
         if let Ok(mut pkt) = rx.try_recv() {
-            let handled = pkt_modify_hook(
-                proxy_type,
-                &mut pkt,
-                config.dpi,
-                config.developer_mode,
-                config.disable_media_sink,
-                config.disable_tts_sink,
-                config.remove_tap_restriction,
-                config.video_in_motion,
-                config.ev,
-                config.remove_bluetooth,
-                config.remove_wifi,
-                &mut ctx,
-                sensor_channel.clone(),
-                config.ev_battery_logger.clone(),
-                config.ev_connector_types.clone(),
-            )
-            .await?;
+            let handled =
+                pkt_modify_hook(proxy_type, &mut pkt, &mut ctx, sensor_channel.clone(), &cfg)
+                    .await?;
             let _ = pkt_debug(
                 proxy_type,
                 HexdumpLevel::DecryptedOutput,
@@ -864,19 +840,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                     let _ = pkt_modify_hook(
                         proxy_type,
                         &mut pkt,
-                        config.dpi,
-                        config.developer_mode,
-                        config.disable_media_sink,
-                        config.disable_tts_sink,
-                        config.remove_tap_restriction,
-                        config.video_in_motion,
-                        config.ev,
-                        config.remove_bluetooth,
-                        config.remove_wifi,
                         &mut ctx,
                         sensor_channel.clone(),
-                        config.ev_battery_logger.clone(),
-                        config.ev_connector_types.clone(),
+                        &cfg,
                     )
                     .await?;
                     let _ = pkt_debug(

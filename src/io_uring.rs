@@ -395,7 +395,7 @@ pub async fn io_loop(
             tx_hu.clone(),
             rx_hu,
             rxr_md,
-            config.clone(),
+            shared_config.clone(),
             sensor_channel.clone(),
         ));
         from_stream = tokio_uring::spawn(proxy(
@@ -405,7 +405,7 @@ pub async fn io_loop(
             tx_md,
             rx_md,
             rxr_hu,
-            config.clone(),
+            shared_config.clone(),
             sensor_channel.clone(),
         ));
 
