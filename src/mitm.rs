@@ -61,7 +61,7 @@ pub struct ModifyContext {
     sensor_channel: Option<u8>,
 }
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 pub enum ProxyType {
     HeadUnit,
     MobileDevice,
@@ -349,7 +349,10 @@ pub async fn pkt_modify_hook(
     }
     // trying to obtain an Enum from message_id
     let control = protos::ControlMessageType::from_i32(message_id);
-    debug!("message_id = {:04X}, {:?}", message_id, control);
+    debug!(
+        "message_id = {:04X}, {:?}, proxy_type: {:?}",
+        message_id, control, proxy_type
+    );
 
     // parsing data
     match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
