@@ -76,6 +76,7 @@ async fn power_up_and_wait_for_connection(
     connect: Option<Address>,
     keepalive: bool,
     bt_timeout: Duration,
+    stopped: bool,
 ) -> Result<(BluetoothState, Stream)> {
     // setting BT alias for further use
     let alias = match btalias {
@@ -164,83 +165,88 @@ async fn power_up_and_wait_for_connection(
     // try to connect to saved devices or provided one via command line
     let mut connect_task: Option<JoinHandle<Result<()>>> = None;
     if let Some(address) = connect {
-        let adapter_cloned = adapter.clone();
+        if !stopped {
+            let adapter_cloned = adapter.clone();
 
-        connect_task = Some(tokio::spawn(async move {
-            let addresses = if address == Address::any() {
-                info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
-                adapter_cloned.device_addresses().await?
-            } else {
-                vec![address]
-            };
-            // exit if we don't have anything to connect to
-            if addresses.is_empty() {
-                return Ok(());
-            }
-            loop {
-                for addr in &addresses {
-                    let device = adapter_cloned.device(*addr)?;
-                    let dev_name = match device.name().await {
-                        Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
-                        _ => String::default(),
-                    };
-                    info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
-                    if !dongle_mode {
-                        match device.connect_profile(&HSP_AG_UUID).await {
-                            Ok(_) => {
-                                info!(
-                                    "{} 🔗 Successfully connected to device: {}{}",
-                                    NAME, addr, dev_name
-                                );
-                                return Ok(());
+            connect_task = Some(tokio::spawn(async move {
+                let addresses = if address == Address::any() {
+                    info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
+                    adapter_cloned.device_addresses().await?
+                } else {
+                    vec![address]
+                };
+                // exit if we don't have anything to connect to
+                if addresses.is_empty() {
+                    return Ok(());
+                }
+                loop {
+                    for addr in &addresses {
+                        let device = adapter_cloned.device(*addr)?;
+                        let dev_name = match device.name().await {
+                            Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
+                            _ => String::default(),
+                        };
+                        info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
+                        if !dongle_mode {
+                            match device.connect_profile(&HSP_AG_UUID).await {
+                                Ok(_) => {
+                                    info!(
+                                        "{} 🔗 Successfully connected to device: {}{}",
+                                        NAME, addr, dev_name
+                                    );
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "{} 🔇 {}{}: Error connecting: {}",
+                                        NAME, addr, dev_name, e
+                                    )
+                                }
                             }
-                            Err(e) => {
-                                warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e)
-                            }
-                        }
-                    } else {
-                        match device.connect().await {
-                            Ok(_) => {
-                                info!(
-                                    "{} 🔗 Successfully connected to device: {}{}",
-                                    NAME, addr, dev_name
-                                );
-                                return Ok(());
-                            }
-                            Err(e) => {
-                                // should be handled with the following code:
-                                // match e.kind {bluer::ErrorKind::ConnectionAttemptFailed} ...
-                                // but the problem is that not all errors are defined in bluer,
-                                // so just fallback for text-searching in error :(
-                                let error_text = e.to_string();
+                        } else {
+                            match device.connect().await {
+                                Ok(_) => {
+                                    info!(
+                                        "{} 🔗 Successfully connected to device: {}{}",
+                                        NAME, addr, dev_name
+                                    );
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    // should be handled with the following code:
+                                    // match e.kind {bluer::ErrorKind::ConnectionAttemptFailed} ...
+                                    // but the problem is that not all errors are defined in bluer,
+                                    // so just fallback for text-searching in error :(
+                                    let error_text = e.to_string();
 
-                                if let Some(code) =
-                                    error_text.splitn(2, ':').nth(1).map(|s| s.trim())
-                                {
-                                    if code == "br-connection-page-timeout"
-                                        || code == "br-connection-canceled"
+                                    if let Some(code) =
+                                        error_text.splitn(2, ':').nth(1).map(|s| s.trim())
                                     {
-                                        warn!(
-                                            "{} 🔇 {}{}: Error connecting: {}",
-                                            NAME, addr, dev_name, e
-                                        )
-                                    } else {
-                                        info!(
+                                        if code == "br-connection-page-timeout"
+                                            || code == "br-connection-canceled"
+                                        {
+                                            warn!(
+                                                "{} 🔇 {}{}: Error connecting: {}",
+                                                NAME, addr, dev_name, e
+                                            )
+                                        } else {
+                                            info!(
                                             "{} 🔗 Connection success, waiting for AA profile connection: {}{}, ignored error: {}",
                                             NAME, addr, dev_name, e
                                         );
-                                        return Ok(());
+                                            return Ok(());
+                                        }
+                                    } else {
+                                        warn!("{} Unknown bluetooth error: {}", NAME, e);
                                     }
-                                } else {
-                                    warn!("{} Unknown bluetooth error: {}", NAME, e);
                                 }
                             }
                         }
                     }
+                    sleep(Duration::from_secs(1)).await;
                 }
-                sleep(Duration::from_secs(1)).await;
-            }
-        }));
+            }));
+        }
     }
 
     // handling connection to headset profile in own task
@@ -437,6 +443,7 @@ pub async fn bluetooth_setup_connection(
     tcp_start: Arc<Notify>,
     keepalive: bool,
     bt_timeout: Duration,
+    stopped: bool,
 ) -> Result<BluetoothState> {
     use WifiInfoResponse::WifiInfoResponse;
     use WifiStartRequest::WifiStartRequest;
@@ -450,6 +457,7 @@ pub async fn bluetooth_setup_connection(
         connect,
         keepalive,
         bt_timeout,
+        stopped,
     )
     .await?;
 

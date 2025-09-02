@@ -270,6 +270,7 @@ async fn tokio_main(
             loop {
                 // read and clone the effective config in advance to avoid holding the lock
                 let cfg = config.read().await.clone();
+                let stopped = cfg.action_requested == Some(Action::Stop);
 
                 match bluetooth_setup_connection(
                     cfg.advertise,
@@ -280,12 +281,17 @@ async fn tokio_main(
                     tcp_start.clone(),
                     cfg.keepalive,
                     Duration::from_secs(cfg.bt_timeout_secs.into()),
+                    stopped,
                 )
                 .await
                 {
                     Ok(state) => {
                         // we're ready, gracefully shutdown bluetooth in task
                         bt_stop = Some(tokio::spawn(async move { bluetooth_stop(state).await }));
+                        // user connected manually, clear stopped action flag
+                        if stopped {
+                            config.write().await.action_requested = None;
+                        }
                         break;
                     }
                     Err(e) => {
