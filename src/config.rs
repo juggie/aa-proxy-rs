@@ -28,6 +28,7 @@ pub type SharedConfigJson = Arc<RwLock<ConfigJson>>;
 pub enum Action {
     Reconnect,
     Reboot,
+    Stop,
 }
 
 #[derive(Clone)]

@@ -20,6 +20,7 @@ include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::mitm::protos::*;
 use crate::mitm::sensor_source_service::Sensor;
 use crate::mitm::AudioStreamType::*;
+use crate::mitm::ByeByeReason::USER_SELECTION;
 use crate::mitm::SensorMessageId::*;
 use crate::mitm::SensorType::*;
 use protobuf::text_format::print_to_string_pretty;
@@ -27,7 +28,7 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
 use crate::config::HexdumpLevel;
-use crate::config::{AppConfig, SharedConfig};
+use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
@@ -346,6 +347,18 @@ pub async fn pkt_modify_hook(
 
     // parsing data
     match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+        MESSAGE_BYEBYE_REQUEST => {
+            if cfg.stop_on_disconnect && proxy_type == ProxyType::MobileDevice {
+                let msg = ByeByeRequest::parse_from_bytes(data)?;
+                if msg.reason.unwrap_or_default() == USER_SELECTION.into() {
+                    info!(
+                        "{} <bold><blue>Disconnect</> option selected in Android Auto; auto-connect temporarily disabled",
+                        get_name(proxy_type),
+                    );
+                    config.write().await.action_requested = Some(Stop);
+                }
+            }
+        }
         MESSAGE_SERVICE_DISCOVERY_RESPONSE => {
             // rewrite HeadUnit message only, exit if it is MobileDevice
             if proxy_type == ProxyType::MobileDevice {
