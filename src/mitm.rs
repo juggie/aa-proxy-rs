@@ -465,6 +465,12 @@ pub async fn pkt_modify_hook(
                     // set in REST server context for remote EV requests
                     let mut sc_lock = sensor_channel.lock().await;
                     *sc_lock = Some(svc.id() as u8);
+
+                    info!(
+                        "{} <blue>sensor_source_service</> channel is: <b>{:#04x}</>",
+                        get_name(proxy_type),
+                        svc.id() as u8
+                    );
                 }
             }
 
@@ -477,6 +483,12 @@ pub async fn pkt_modify_hook(
                 {
                     // set in local context
                     ctx.nav_channel = Some(svc.id() as u8);
+
+                    info!(
+                        "{} <blue>navigation_status_service</> channel is: <b>{:#04x}</>",
+                        get_name(proxy_type),
+                        svc.id() as u8
+                    );
                 }
             }
 
