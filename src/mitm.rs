@@ -534,6 +534,12 @@ pub async fn pkt_modify_hook(
                     .iter_mut()
                     .find(|svc| !svc.sensor_source_service.sensors.is_empty())
                 {
+                    info!(
+                        "{} <yellow>{:?}</>: adding <b><green>EV</> features...",
+                        get_name(proxy_type),
+                        control.unwrap(),
+                    );
+
                     // add VEHICLE_ENERGY_MODEL_DATA sensor
                     let mut sensor = Sensor::new();
                     sensor.set_sensor_type(SENSOR_VEHICLE_ENERGY_MODEL_DATA);
@@ -561,6 +567,12 @@ pub async fn pkt_modify_hook(
                                 vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()]
                             }
                         };
+                    info!(
+                        "{} <yellow>{:?}</>: EV connectors: {:?}",
+                        get_name(proxy_type),
+                        control.unwrap(),
+                        connectors,
+                    );
                     svc.sensor_source_service
                         .as_mut()
                         .unwrap()
