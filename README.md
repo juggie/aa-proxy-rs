@@ -28,6 +28,8 @@ and the [Radxa Zero 3W](https://radxa.com/products/zeros/zero3w/).
   - Disable TTS sink
   - Video in motion
   - Enable developer mode
+  - Detects user-initiated `Disconnect` on phone and prevents auto-reconnect
+  - `Waze` workaround for LHT (Left-Hand Traffic) countries
 - **[Google Maps EV Routing](#google-maps-ev-routing)** – allows EV-specific navigation features
 - **Wired USB phone mode** – works without the Bluetooth handshake or Wi-Fi pairing
 - **[Support for Google’s Desktop Head Unit (DHU)](#connecting-to-desktop-head-unit-dhu)** – ideal for debugging and development
