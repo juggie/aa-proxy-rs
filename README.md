@@ -206,6 +206,7 @@ Steps:
 
 - Then launch DHU with:  
 `desktop-head-unit --usb=0123456`
+- If you have problems, try to disable `legacy` mode
 
 #### 2. Without Raspberry Pi (host-only testing)
 
