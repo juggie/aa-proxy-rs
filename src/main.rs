@@ -400,7 +400,7 @@ fn main() {
 
     // show SBC model
     if let Ok(model) = get_sbc_model() {
-        info!("{} 📟 SBC model: <bold><blue>{}</>", NAME, model);
+        info!("{} 📟 host device: <bold><blue>{}</>", NAME, model);
     }
 
     // check and display config
