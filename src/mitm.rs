@@ -771,7 +771,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         loop {
             // handling data from opposite device's thread, which needs to be transmitted
             if let Ok(pkt) = rx.try_recv() {
-                pkt.transmit(&mut device).await?;
+                pkt.transmit(&mut device)
+                    .await
+                    .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
 
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
@@ -812,7 +814,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         let pkt = rx.recv().await.ok_or("rx channel hung up")?;
         // sending reply back to the HU
         let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
-        pkt.transmit(&mut device).await?;
+        pkt.transmit(&mut device)
+            .await
+            .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
 
         // doing SSL handshake
         const STEPS: u8 = 2;
@@ -837,14 +841,18 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             }
             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
             let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
-            pkt.transmit(&mut device).await?;
+            pkt.transmit(&mut device)
+                .await
+                .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
         }
     } else if proxy_type == ProxyType::MobileDevice {
         // expecting version request from the HU here...
         let pkt = rx.recv().await.ok_or("rx channel hung up")?;
         // sending to the MD
         let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
-        pkt.transmit(&mut device).await?;
+        pkt.transmit(&mut device)
+            .await
+            .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
         // waiting for MD reply
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
         let _ = pkt_debug(
@@ -881,7 +889,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             };
             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
             let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
-            pkt.transmit(&mut device).await?;
+            pkt.transmit(&mut device)
+                .await
+                .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
 
             let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
             let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
@@ -923,7 +933,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             } else {
                 pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
                 let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
-                pkt.transmit(&mut device).await?;
+                pkt.transmit(&mut device)
+                    .await
+                    .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
 
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
