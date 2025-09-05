@@ -1,3 +1,4 @@
+use anyhow::Context;
 use log::log_enabled;
 use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
@@ -653,29 +654,34 @@ async fn read_input_data<A: Endpoint<A>>(
 ) -> Result<()> {
     let mut newdata = vec![0u8; BUFFER_LEN];
     let n;
+    let len;
+
     match obj {
         IoDevice::UsbReader(device, _) => {
             let mut dev = device.borrow_mut();
             let retval = dev.read(&mut newdata);
-            n = retval.await;
+            len = retval
+                .await
+                .context("read_input_data: UsbReader read error")?;
         }
         IoDevice::EndpointIo(device) => {
             let retval = device.read(newdata);
             (n, newdata) = timeout(Duration::from_millis(15000), retval)
                 .await
-                .map_err(|_| -> String { format!("read_input_data: timeout") })?;
+                .context("read_input_data: EndpointIo timeout")?;
+            len = n.context("read_input_data: EndpointIo read error")?;
         }
         IoDevice::TcpStreamIo(device) => {
             let retval = device.read(newdata);
             (n, newdata) = timeout(Duration::from_millis(15000), retval)
                 .await
-                .map_err(|_| -> String { format!("read_input_data: timeout") })?;
+                .context("read_input_data: TcpStreamIo timeout")?;
+            len = n.context("read_input_data: TcpStreamIo read error")?;
         }
         _ => todo!(),
     }
-    let n = n?;
-    if n > 0 {
-        rbuf.write(&newdata.slice(..n))?;
+    if len > 0 {
+        rbuf.write(&newdata.slice(..len))?;
     }
     Ok(())
 }
