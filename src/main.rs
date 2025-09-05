@@ -21,6 +21,7 @@ use humantime::format_duration;
 use io_uring::io_loop;
 use simple_config_parser::Config;
 use simplelog::*;
+use std::os::unix::fs::PermissionsExt;
 use usb_gadget::uevent_listener;
 use usb_gadget::UsbGadgetState;
 
@@ -449,10 +450,21 @@ fn main() -> Result<()> {
     // generate system configs from template and exit
     if args.generate_system_config {
         generate_hostapd_conf(config).expect("error generating config from template");
+
         generate_usb_strings(UMTPRD_CONF_IN, UMTPRD_CONF_OUT)
             .expect("error generating config from template");
+
         generate_usb_strings(GADGET_INIT_IN, GADGET_INIT_OUT)
             .expect("error generating config from template");
+        // make a script executable
+        info!(
+            "{} 🚀 Making script executable: <bold><green>{}</>",
+            NAME, GADGET_INIT_OUT
+        );
+        let mut perms = fs::metadata(GADGET_INIT_OUT)?.permissions();
+        perms.set_mode(0o755); // rwxr-xr-x
+        fs::set_permissions(GADGET_INIT_OUT, perms)?;
+
         return Ok(());
     }
 
