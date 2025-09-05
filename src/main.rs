@@ -46,6 +46,8 @@ const HOSTAPD_CONF_IN: &str = "/etc/hostapd.conf.in";
 const HOSTAPD_CONF_OUT: &str = "/var/run/hostapd.conf";
 const UMTPRD_CONF_IN: &str = "/etc/umtprd/umtprd.conf.in";
 const UMTPRD_CONF_OUT: &str = "/var/run/umtprd.conf";
+const GADGET_INIT_IN: &str = "/etc/S92usb_gadget.in";
+const GADGET_INIT_OUT: &str = "/var/run/S92usb_gadget";
 const REBOOT_CMD: &str = "/sbin/reboot";
 
 /// AndroidAuto wired/wireless proxy
@@ -445,6 +447,8 @@ fn main() {
     if args.generate_system_config {
         generate_hostapd_conf(config).expect("error generating config from template");
         generate_usb_strings(UMTPRD_CONF_IN, UMTPRD_CONF_OUT)
+            .expect("error generating config from template");
+        generate_usb_strings(GADGET_INIT_IN, GADGET_INIT_OUT)
             .expect("error generating config from template");
         return;
     }
