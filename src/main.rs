@@ -44,6 +44,8 @@ use tokio::sync::RwLock;
 const NAME: &str = "<i><bright-black> main: </>";
 const HOSTAPD_CONF_IN: &str = "/etc/hostapd.conf.in";
 const HOSTAPD_CONF_OUT: &str = "/var/run/hostapd.conf";
+const UMTPRD_CONF_IN: &str = "/etc/umtprd/umtprd.conf.in";
+const UMTPRD_CONF_OUT: &str = "/var/run/umtprd.conf";
 const REBOOT_CMD: &str = "/sbin/reboot";
 
 /// AndroidAuto wired/wireless proxy
@@ -383,6 +385,41 @@ fn generate_hostapd_conf(config: AppConfig) -> std::io::Result<()> {
     fs::write(HOSTAPD_CONF_OUT, rendered)
 }
 
+fn generate_umtprd_conf() -> std::io::Result<()> {
+    info!(
+        "{} 🗃️ Generating config from input template: <bold><green>{}</>",
+        NAME, UMTPRD_CONF_IN
+    );
+
+    let template = fs::read_to_string(UMTPRD_CONF_IN)?;
+
+    let rendered = render_template(
+        &template,
+        &[
+            ("MODEL", &get_sbc_model().unwrap_or_default()),
+            (
+                "SERIAL",
+                &get_serial_number().unwrap_or("0123456".to_string()),
+            ),
+            (
+                "FIRMWARE_VER",
+                &format!(
+                    "{}, git: {}-{}",
+                    env!("BUILD_DATE"),
+                    env!("GIT_DATE"),
+                    env!("GIT_HASH")
+                ),
+            ),
+        ],
+    );
+
+    info!(
+        "{} 💾 Saving generated file as: <bold><green>{}</>",
+        NAME, UMTPRD_CONF_OUT
+    );
+    fs::write(UMTPRD_CONF_OUT, rendered)
+}
+
 fn main() {
     let started = Instant::now();
 
@@ -404,6 +441,7 @@ fn main() {
     // generate system configs from template and exit
     if args.generate_system_config {
         generate_hostapd_conf(config).expect("error generating config from template");
+        generate_umtprd_conf().expect("error generating config from template");
         return;
     }
 
