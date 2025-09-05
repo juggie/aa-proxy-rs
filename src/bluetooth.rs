@@ -59,8 +59,8 @@ pub struct BluetoothState {
 pub async fn get_cpu_serial_number_suffix() -> Result<String> {
     let mut serial = String::new();
     let contents = tokio::fs::read_to_string("/sys/firmware/devicetree/base/serial-number").await?;
-    // check if we read the serial number with correct length
     let trimmed = contents.trim_end_matches(char::from(0)).trim();
+    // check if we read the serial number with correct length
     if trimmed.len() >= 6 {
         serial = trimmed[trimmed.len() - 6..].to_string();
     }
