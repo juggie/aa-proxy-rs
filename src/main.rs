@@ -26,7 +26,6 @@ use usb_gadget::UsbGadgetState;
 
 use std::fs;
 use std::fs::OpenOptions;
-use std::io::Result;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
@@ -39,6 +38,10 @@ use tokio::time::Instant;
 
 use std::net::SocketAddr;
 use tokio::sync::RwLock;
+
+// Just a generic Result type to ease error handling for us. Errors in multithreaded
+// async contexts needs some extra restrictions
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> main: </>";
@@ -425,7 +428,7 @@ fn generate_usb_strings(input: &str, output: &str) -> std::io::Result<()> {
     fs::write(output, rendered)
 }
 
-fn main() {
+fn main() -> Result<()> {
     let started = Instant::now();
 
     // CLI arguments
@@ -450,7 +453,7 @@ fn main() {
             .expect("error generating config from template");
         generate_usb_strings(GADGET_INIT_IN, GADGET_INIT_OUT)
             .expect("error generating config from template");
-        return;
+        return Ok(());
     }
 
     // show SBC model
@@ -527,4 +530,6 @@ fn main() {
         "🚩 aa-proxy-rs terminated, running time: {}",
         format_duration(started.elapsed()).to_string()
     );
+
+    Ok(())
 }
