@@ -122,10 +122,6 @@
           "typ": "string",
           "description": "hostapd.conf file location (used for obtaining AP SSID and WPA passphrase)"
         },
-        "keepalive": {
-          "typ": "boolean",
-          "description": "BT keep alive mode: BLE adapter doesn't power off after successful connection, so that the phone can remain connected (used in special configurations)"
-        },
         "change_usb_order": {
           "typ": "boolean",
           "description": "Connect to HU USB before Bluetooth handshake"

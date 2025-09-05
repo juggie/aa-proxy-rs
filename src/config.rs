@@ -164,7 +164,6 @@ pub struct AppConfig {
     pub hostapd_conf: PathBuf,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub btalias: Option<String>,
-    pub keepalive: bool,
     pub timeout_secs: u16,
     #[serde(
         default = "webserver_default_bind",
@@ -264,7 +263,6 @@ impl Default for AppConfig {
             iface: "wlan0".to_string(),
             hostapd_conf: "/var/run/hostapd.conf".into(),
             btalias: None,
-            keepalive: false,
             timeout_secs: 10,
             webserver: webserver_default_bind(),
             bt_timeout_secs: 120,
@@ -352,7 +350,6 @@ impl AppConfig {
         if let Some(alias) = &self.btalias {
             doc["btalias"] = value(alias);
         }
-        doc["keepalive"] = value(self.keepalive);
         doc["timeout_secs"] = value(self.timeout_secs as i64);
         if let Some(webserver) = &self.webserver {
             doc["webserver"] = value(webserver);

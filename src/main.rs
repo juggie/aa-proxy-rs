@@ -279,7 +279,6 @@ async fn tokio_main(
                     cfg.connect,
                     wifi_conf.clone(),
                     tcp_start.clone(),
-                    cfg.keepalive,
                     Duration::from_secs(cfg.bt_timeout_secs.into()),
                     stopped,
                 )

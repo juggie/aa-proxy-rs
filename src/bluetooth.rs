@@ -5,7 +5,7 @@ use bluer::{
     adv::AdvertisementHandle,
     agent::{Agent, AgentHandle},
     rfcomm::{Profile, ProfileHandle, Role, Stream},
-    Adapter, Address, Uuid,
+    Address, Uuid,
 };
 use futures::StreamExt;
 use simplelog::*;
@@ -50,12 +50,10 @@ enum MessageId {
 }
 
 pub struct BluetoothState {
-    adapter: Adapter,
     handle_ble: Option<AdvertisementHandle>,
     handle_aa: ProfileHandle,
     handle_hsp: Option<JoinHandle<Result<ProfileHandle>>>,
     handle_agent: AgentHandle,
-    keepalive: bool,
 }
 
 pub async fn get_cpu_serial_number_suffix() -> Result<String> {
@@ -74,7 +72,6 @@ async fn power_up_and_wait_for_connection(
     dongle_mode: bool,
     btalias: Option<String>,
     connect: Option<Address>,
-    keepalive: bool,
     bt_timeout: Duration,
     stopped: bool,
 ) -> Result<(BluetoothState, Stream)> {
@@ -310,12 +307,10 @@ async fn power_up_and_wait_for_connection(
 
     // generate structure with adapter and handlers for graceful shutdown later
     let state = BluetoothState {
-        adapter,
         handle_ble,
         handle_aa,
         handle_hsp: task_hsp,
         handle_agent,
-        keepalive,
     };
 
     Ok((state, stream))
@@ -424,13 +419,6 @@ pub async fn bluetooth_stop(state: BluetoothState) -> Result<()> {
         }
     }
 
-    if state.keepalive {
-        info!("{} 💤 Bluetooth adapter stays on", NAME);
-    } else {
-        state.adapter.set_powered(false).await?;
-        info!("{} 💤 Bluetooth adapter powered off", NAME);
-    }
-
     Ok(())
 }
 
@@ -441,7 +429,6 @@ pub async fn bluetooth_setup_connection(
     connect: Option<Address>,
     wifi_config: WifiConfig,
     tcp_start: Arc<Notify>,
-    keepalive: bool,
     bt_timeout: Duration,
     stopped: bool,
 ) -> Result<BluetoothState> {
@@ -455,7 +442,6 @@ pub async fn bluetooth_setup_connection(
         dongle_mode,
         btalias,
         connect,
-        keepalive,
         bt_timeout,
         stopped,
     )
