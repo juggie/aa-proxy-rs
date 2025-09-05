@@ -385,13 +385,13 @@ fn generate_hostapd_conf(config: AppConfig) -> std::io::Result<()> {
     fs::write(HOSTAPD_CONF_OUT, rendered)
 }
 
-fn generate_umtprd_conf() -> std::io::Result<()> {
+fn generate_usb_strings(input: &str, output: &str) -> std::io::Result<()> {
     info!(
         "{} 🗃️ Generating config from input template: <bold><green>{}</>",
-        NAME, UMTPRD_CONF_IN
+        NAME, input
     );
 
-    let template = fs::read_to_string(UMTPRD_CONF_IN)?;
+    let template = fs::read_to_string(input)?;
 
     let rendered = render_template(
         &template,
@@ -418,9 +418,9 @@ fn generate_umtprd_conf() -> std::io::Result<()> {
 
     info!(
         "{} 💾 Saving generated file as: <bold><green>{}</>",
-        NAME, UMTPRD_CONF_OUT
+        NAME, output
     );
-    fs::write(UMTPRD_CONF_OUT, rendered)
+    fs::write(output, rendered)
 }
 
 fn main() {
@@ -444,7 +444,8 @@ fn main() {
     // generate system configs from template and exit
     if args.generate_system_config {
         generate_hostapd_conf(config).expect("error generating config from template");
-        generate_umtprd_conf().expect("error generating config from template");
+        generate_usb_strings(UMTPRD_CONF_IN, UMTPRD_CONF_OUT)
+            .expect("error generating config from template");
         return;
     }
 
