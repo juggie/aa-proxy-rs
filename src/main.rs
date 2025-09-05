@@ -396,7 +396,10 @@ fn generate_umtprd_conf() -> std::io::Result<()> {
     let rendered = render_template(
         &template,
         &[
-            ("MODEL", &get_sbc_model().unwrap_or_default()),
+            (
+                "MODEL",
+                &get_sbc_model().map_or(String::new(), |model| format!(" ({})", model)),
+            ),
             (
                 "SERIAL",
                 &get_serial_number().unwrap_or("0123456".to_string()),
