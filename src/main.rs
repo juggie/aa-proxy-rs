@@ -331,6 +331,16 @@ pub fn get_sbc_model() -> Result<String> {
         .to_string())
 }
 
+/// Returns the full device serial number from Device Tree
+pub fn get_serial_number() -> Result<String> {
+    Ok(
+        fs::read_to_string("/sys/firmware/devicetree/base/serial-number")?
+            .trim_end_matches(char::from(0))
+            .trim()
+            .to_string(),
+    )
+}
+
 fn render_template(template: &str, vars: &[(&str, &str)]) -> String {
     let mut output = template.to_string();
     for (key, value) in vars {
