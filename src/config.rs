@@ -418,7 +418,7 @@ impl Default for AppConfig {
             action_requested: None,
             ev_connector_types: None,
             enable_ssh: true,
-            wifi_version: get_latest_wifi_version().unwrap_or(0),
+            wifi_version: get_latest_wifi_version().unwrap_or(1),
             band: {
                 if supports_5ghz_wifi().unwrap_or(false) {
                     // Eventually: Add check for 6 GHz
