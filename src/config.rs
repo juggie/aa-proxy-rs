@@ -230,147 +230,51 @@ impl Default for ConfigJson {
     }
 }
 
+fn filter_iw_list(pattern: &str) -> std::io::Result<bool> {
+    // Run the command `iw list`
+    let output = Command::new("iw").arg("list").output()?;
+
+    // Convert the command output bytes to a string
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Iterate over each line in the output
+    for line in stdout.lines() {
+        // Check if the line contains search pattern
+        if line.contains(pattern) {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
 fn supports_5ghz_wifi() -> std::io::Result<bool> {
-    // Run the command `iw list`
-    let output = Command::new("iw").arg("list").output()?;
-
-    // Convert the command output bytes to a string
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Iterate over each line in the output
-    for line in stdout.lines() {
-        // Check if the line contains expected freq
-        if line.contains("5180.0 MHz") {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
-// We don't use this right now. This is for future expansion with Wi-Fi 6E devices
-fn supports_6ghz_wifi() -> std::io::Result<bool> {
-    // Run the command `iw list`
-    let output = Command::new("iw").arg("list").output()?;
-
-    // Convert the command output bytes to a string
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Iterate over each line in the output
-    for line in stdout.lines() {
-        // Check if the line contains expected freq
-        if line.contains("5955.0 MHz") {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
-fn supports_80211ax() -> std::io::Result<bool> {
-    // Run the command `iw list`
-    let output = Command::new("iw").arg("list").output()?;
-
-    // Convert the command output bytes to a string
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Iterate over each line in the output
-    for line in stdout.lines() {
-        // Check if the line suggests HE AP support
-        if line.contains("HE Iftypes: AP") {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
-fn supports_80211ac() -> std::io::Result<bool> {
-    // Run the command `iw list`
-    let output = Command::new("iw").arg("list").output()?;
-
-    // Convert the command output bytes to a string
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Iterate over each line in the output
-    for line in stdout.lines() {
-        // Check if the line lists VHT Capabilities
-        if line.contains("VHT Capabilities") {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
-fn supports_80211n() -> std::io::Result<bool> {
-    // Run the command `iw list`
-    let output = Command::new("iw").arg("list").output()?;
-
-    // Convert the command output bytes to a string
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Iterate over each line in the output
-    for line in stdout.lines() {
-        // Check if the line lists HT Capabilities but isn't "VHT Capabilites"
-        if line.contains("HT Capabilities") && !line.contains("VHT Capabilities") {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
-fn supports_80211g() -> std::io::Result<bool> {
-    // Run the command `iw list`
-    let output = Command::new("iw").arg("list").output()?;
-
-    // Convert the command output bytes to a string
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Iterate over each line in the output
-    for line in stdout.lines() {
-        // Check if the line lists 802.11g bitrates
-        if line.contains("54.0 Mbps") {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
-fn supports_80211b() -> std::io::Result<bool> {
-    // Run the command `iw list`
-    let output = Command::new("iw").arg("list").output()?;
-
-    // Convert the command output bytes to a string
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Iterate over each line in the output
-    for line in stdout.lines() {
-        // Check if the line lists 802.11b bitrates
-        if line.contains("11.0 Mbps") {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
+    filter_iw_list("5180.0 MHz")
 }
 
 fn get_latest_wifi_version() -> std::io::Result<u16> {
-    if supports_80211ax()? {
+    // note:
+    // for checking 6GHz: filter_iw_list("5955.0 MHz")
+    // We don't use this right now. This is for future expansion with Wi-Fi 6E devices
+
+    if filter_iw_list("HE Iftypes: AP")? {
+        // 802.11ax
         Ok(6)
-    } else if supports_80211ac()? {
+    } else if filter_iw_list("VHT Capabilities")? {
+        // 802.11ac
         Ok(5)
-    } else if supports_80211n()? {
+    } else if filter_iw_list(" HT Capabilities")? {
+        // 802.11n
         Ok(4)
-    } else if supports_80211g()? {
+    } else if filter_iw_list("54.0 Mbps")? {
+        // 802.11g
         Ok(3)
     } else if supports_5ghz_wifi()? {
         // I don't know a proper way to check for 802.11a, but it is the first version to support
         // 5 GHz Wi-Fi and this far down the if statement we can use this to check.
         Ok(2)
-    } else if supports_80211b()? {
+    } else if filter_iw_list("11.0 Mbps")? {
+        // 802.11b
         Ok(1)
     } else {
         Err(Error::new(
@@ -382,7 +286,6 @@ fn get_latest_wifi_version() -> std::io::Result<u16> {
 
 impl Default for AppConfig {
     fn default() -> Self {
-        let band_a = supports_5ghz_wifi().unwrap_or(false);
         Self {
             advertise: false,
             dongle_mode: false,
