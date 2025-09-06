@@ -1,7 +1,13 @@
+use nix::sys::signal::{kill as nix_kill, Signal};
+use nix::unistd::Pid;
+use shell_words;
 use simplelog::*;
 use std::path::PathBuf;
 use tokio::fs;
+use tokio::process::{Child, Command};
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
+use tokio::time::{sleep, Duration};
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -30,6 +36,13 @@ pub struct BatteryData {
     pub battery_capacity_wh: Option<u64>,
     pub reference_air_density: Option<f32>,
     pub external_temp_celsius: Option<f32>,
+}
+
+#[derive(Debug)]
+pub enum EvTaskCommand {
+    Start(String), // command line: executable path plus arguments as one string
+    Stop,
+    Terminate,
 }
 
 fn scale_percent_to_value(percent: f32, max_value: u64) -> u64 {
@@ -106,4 +119,90 @@ pub async fn send_ev_data(tx: Sender<Packet>, sensor_ch: u8, batt: BatteryData) 
     info!("{} injecting ENERGY_MODEL_DATA packet...", NAME);
 
     Ok(())
+}
+
+pub async fn spawn_ev_client_task() -> (
+    tokio::task::JoinHandle<()>,
+    tokio::sync::mpsc::Sender<EvTaskCommand>,
+) {
+    let (tx, mut rx) = mpsc::channel::<EvTaskCommand>(10);
+
+    let handle = tokio::spawn(async move {
+        let mut child: Option<Child> = None;
+
+        while let Some(cmd) = rx.recv().await {
+            match cmd {
+                EvTaskCommand::Start(cmd_line) => {
+                    if child.is_some() {
+                        info!("{} process already running.", NAME);
+                    } else {
+                        match shell_words::split(&cmd_line) {
+                            Ok(tokens) if !tokens.is_empty() => {
+                                let program = &tokens[0];
+                                let args = &tokens[1..];
+                                info!("{} starting process: {} {:?}", NAME, program, args);
+
+                                let process = Command::new(program)
+                                    .args(args)
+                                    .spawn()
+                                    .expect("Failed to start process");
+
+                                child = Some(process);
+                            }
+                            Ok(_) => {
+                                info!("{} empty command string, nothing to run.", NAME);
+                            }
+                            Err(e) => {
+                                error!("{} failed to parse command: {:?}", NAME, e);
+                            }
+                        }
+                    }
+                }
+
+                EvTaskCommand::Stop => {
+                    if let Some(mut proc) = child.take() {
+                        if let Some(pid) = proc.id() {
+                            info!("{} sending SIGTERM to process {}", NAME, pid);
+                            let _ = nix_kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
+                            sleep(Duration::from_secs(2)).await;
+
+                            match proc.try_wait() {
+                                Ok(Some(status)) => {
+                                    info!("{} process exited with status: {:?}", NAME, status);
+                                }
+                                Ok(None) => {
+                                    info!("{} process still running, sending SIGKILL...", NAME);
+                                    let _ = nix_kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
+                                    let _ = proc.wait().await;
+                                    info!("{} process killed.", NAME);
+                                }
+                                Err(e) => {
+                                    error!("{} error checking process status: {:?}", NAME, e);
+                                }
+                            }
+                        } else {
+                            info!("{} process has no PID (already exited?)", NAME);
+                        }
+                    } else {
+                        info!("{} no process to stop.", NAME);
+                    }
+                }
+
+                EvTaskCommand::Terminate => {
+                    info!("{} terminating task...", NAME);
+                    if let Some(mut proc) = child.take() {
+                        if let Some(pid) = proc.id() {
+                            let _ = nix_kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
+                            let _ = proc.wait().await;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        info!("{} task finished.", NAME);
+    });
+
+    (handle, tx)
 }
