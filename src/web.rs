@@ -119,6 +119,7 @@ pub fn render_config_values(config: &ConfigJson) -> String {
             let input_html = match val.typ.as_str() {
                 "string" => format!(r#"<input type="text" id="{key}" />"#),
                 "integer" => format!(r#"<input type="number" id="{key}" />"#),
+                "float" => format!(r#"<input type="number" step="any" id="{key}" />"#),
                 "boolean" => format!(r#"<input type="checkbox" role="switch" id="{key}" />"#),
                 "select" => {
                     // Render a <select> with options if they exist

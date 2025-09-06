@@ -51,6 +51,7 @@ pub fn generate_config<P: AsRef<Path>>(output_path: P) -> Result<(), Box<dyn std
                 .unwrap_or_else(|| match val.typ.as_str() {
                     "string" => r#""""#.to_string(),
                     "integer" => "0".to_string(),
+                    "float" => "0.0".to_string(),
                     "boolean" => "false".to_string(),
                     "select" => {
                         if let Some(values) = &val.values {
