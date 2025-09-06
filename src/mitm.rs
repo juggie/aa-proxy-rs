@@ -5,7 +5,6 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{Read, Write};
-use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -31,6 +30,7 @@ use protos::ControlMessageType::{self, *};
 
 use crate::config::HexdumpLevel;
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
+use crate::ev::EvTaskCommand;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
@@ -62,6 +62,7 @@ const KEYS_PATH: &str = "/etc/aa-proxy-rs";
 pub struct ModifyContext {
     sensor_channel: Option<u8>,
     nav_channel: Option<u8>,
+    ev_tx: Sender<EvTaskCommand>,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -308,8 +309,10 @@ pub async fn pkt_modify_hook(
                             *pkt = reply;
 
                             // start EV battery logger if neded
-                            if let Some(ref path) = cfg.ev_battery_logger {
-                                let _ = Command::new(path).arg("start").spawn();
+                            if let Some(path) = &cfg.ev_battery_logger {
+                                ctx.ev_tx
+                                    .send(EvTaskCommand::Start(path.to_string()))
+                                    .await?;
                             }
 
                             // return true => send own reply without processing
@@ -761,6 +764,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     mut rxr: Receiver<Packet>,
     mut config: SharedConfig,
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
+    ev_tx: Sender<EvTaskCommand>,
 ) -> Result<()> {
     let cfg = config.read().await.clone();
     let passthrough = !cfg.mitm;
@@ -903,6 +907,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let mut ctx = ModifyContext {
         sensor_channel: None,
         nav_channel: None,
+        ev_tx,
     };
     loop {
         // handling data from opposite device's thread, which needs to be transmitted

@@ -3,7 +3,6 @@ use humantime::format_duration;
 use simplelog::*;
 use std::cell::RefCell;
 use std::marker::PhantomData;
-use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -34,6 +33,8 @@ const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
 use crate::config::{Action, SharedConfig};
 use crate::config::{TCP_DHU_PORT, TCP_SERVER_PORT};
+use crate::ev::spawn_ev_client_task;
+use crate::ev::EvTaskCommand;
 use crate::mitm::endpoint_reader;
 use crate::mitm::proxy;
 use crate::mitm::Packet;
@@ -220,6 +221,7 @@ pub async fn io_loop(
     let mut dhu_listener = None;
     let mut md_listener = None;
     let shared_config = config.clone();
+    let (client_handler, ev_tx) = spawn_ev_client_task().await;
 
     loop {
         // reload new config
@@ -397,6 +399,7 @@ pub async fn io_loop(
             rxr_md,
             shared_config.clone(),
             sensor_channel.clone(),
+            ev_tx.clone(),
         ));
         from_stream = tokio_uring::spawn(proxy(
             ProxyType::MobileDevice,
@@ -407,6 +410,7 @@ pub async fn io_loop(
             rxr_hu,
             shared_config.clone(),
             sensor_channel.clone(),
+            ev_tx.clone(),
         ));
 
         // Thread for monitoring transfer
@@ -448,8 +452,8 @@ pub async fn io_loop(
         let mut sc_lock = sensor_channel.lock().await;
         *sc_lock = None;
         // stop EV battery logger if neded
-        if let Some(ref path) = config.ev_battery_logger {
-            let _ = Command::new(path).arg("stop").spawn();
+        if config.ev_battery_logger.is_some() {
+            ev_tx.send(EvTaskCommand::Stop).await?;
         }
 
         info!(
@@ -460,4 +464,8 @@ pub async fn io_loop(
         // stream(s) closed, notify main loop to restart
         need_restart.notify_one();
     }
+
+    // terminate ev client handler
+    ev_tx.send(EvTaskCommand::Terminate).await?;
+    client_handler.await?;
 }

@@ -188,7 +188,7 @@ pub struct AppConfig {
     pub stop_on_disconnect: bool,
     pub waze_lht_workaround: bool,
     #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub ev_battery_logger: Option<PathBuf>,
+    pub ev_battery_logger: Option<String>,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub ev_connector_types: Option<String>,
     pub enable_ssh: bool,
@@ -375,7 +375,7 @@ impl AppConfig {
         doc["stop_on_disconnect"] = value(self.stop_on_disconnect);
         doc["waze_lht_workaround"] = value(self.waze_lht_workaround);
         if let Some(path) = &self.ev_battery_logger {
-            doc["ev_battery_logger"] = value(path.display().to_string());
+            doc["ev_battery_logger"] = value(path);
         }
         if let Some(ev_connector_types) = &self.ev_connector_types {
             doc["ev_connector_types"] = value(ev_connector_types);
