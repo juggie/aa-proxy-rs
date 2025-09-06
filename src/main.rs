@@ -364,19 +364,24 @@ fn generate_hostapd_conf(config: AppConfig) -> std::io::Result<()> {
         NAME, HOSTAPD_CONF_IN
     );
 
+    // Technically for IEEE802.11g we have to use g but AFAIK b is fine.
+    let hostapd_mode = if config.frequency == 5.0 || config.frequency == 6.0 {
+        "a"
+    } else {
+        "b"
+    };
+
     let template = fs::read_to_string(HOSTAPD_CONF_IN)?;
 
+    // Eventually: For 6 GHz, we will need more options like opclass.
     let rendered = render_template(
         &template,
         &[
-            ("HW_MODE", &config.hw_mode),
-            ("AC_MODE", {
-                if config.hw_mode == "a" {
-                    "1"
-                } else {
-                    "0"
-                }
-            }),
+            ("HW_MODE", hostapd_mode),
+            ("BE_MODE", if config.wifi_version >= 7 { "1" } else { "0" }),
+            ("AX_MODE", if config.wifi_version >= 6 { "1" } else { "0" }),
+            ("AC_MODE", if config.wifi_version >= 5 { "1" } else { "0" }),
+            ("N_MODE", if config.wifi_version >= 4 { "1" } else { "0" }),
             ("COUNTRY_CODE", &config.country_code),
             ("CHANNEL", &config.channel.to_string()),
             ("SSID", &config.ssid),

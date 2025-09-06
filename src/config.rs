@@ -4,10 +4,11 @@ use serde::de::{self, Deserializer, Error as DeError, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use simplelog::*;
+use std::io::Error;
 use std::process::Command;
 use std::{
     fmt::{self, Display},
-    fs,
+    fs, io,
     path::PathBuf,
     str::FromStr,
     sync::Arc,
@@ -192,7 +193,8 @@ pub struct AppConfig {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub ev_connector_types: Option<String>,
     pub enable_ssh: bool,
-    pub hw_mode: String,
+    pub wifi_version: u16,
+    pub frequency: f32,
     pub country_code: String,
     pub channel: u8,
     pub ssid: String,
@@ -242,8 +244,139 @@ fn supports_5ghz_wifi() -> std::io::Result<bool> {
             return Ok(true);
         }
     }
+    Ok(false)
+}
+
+// We don't use this right now. This is for future expansion with Wi-Fi 6E devices
+fn supports_6ghz_wifi() -> std::io::Result<bool> {
+    // Run the command `iw list`
+    let output = Command::new("iw").arg("list").output()?;
+
+    // Convert the command output bytes to a string
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Iterate over each line in the output
+    for line in stdout.lines() {
+        // Check if the line contains expected freq
+        if line.contains("5955.0 MHz") {
+            return Ok(true);
+        }
+    }
 
     Ok(false)
+}
+
+fn supports_80211ax() -> std::io::Result<bool> {
+    // Run the command `iw list`
+    let output = Command::new("iw").arg("list").output()?;
+
+    // Convert the command output bytes to a string
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Iterate over each line in the output
+    for line in stdout.lines() {
+        // Check if the line suggests HE AP support
+        if line.contains("HE Iftypes: AP") {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn supports_80211ac() -> std::io::Result<bool> {
+    // Run the command `iw list`
+    let output = Command::new("iw").arg("list").output()?;
+
+    // Convert the command output bytes to a string
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Iterate over each line in the output
+    for line in stdout.lines() {
+        // Check if the line lists VHT Capabilities
+        if line.contains("VHT Capabilities") {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn supports_80211n() -> std::io::Result<bool> {
+    // Run the command `iw list`
+    let output = Command::new("iw").arg("list").output()?;
+
+    // Convert the command output bytes to a string
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Iterate over each line in the output
+    for line in stdout.lines() {
+        // Check if the line lists HT Capabilities but isn't "VHT Capabilites"
+        if line.contains("HT Capabilities") && !line.contains("VHT Capabilities") {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn supports_80211g() -> std::io::Result<bool> {
+    // Run the command `iw list`
+    let output = Command::new("iw").arg("list").output()?;
+
+    // Convert the command output bytes to a string
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Iterate over each line in the output
+    for line in stdout.lines() {
+        // Check if the line lists 802.11g bitrates
+        if line.contains("54.0 Mbps") {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn supports_80211b() -> std::io::Result<bool> {
+    // Run the command `iw list`
+    let output = Command::new("iw").arg("list").output()?;
+
+    // Convert the command output bytes to a string
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Iterate over each line in the output
+    for line in stdout.lines() {
+        // Check if the line lists 802.11b bitrates
+        if line.contains("11.0 Mbps") {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn get_latest_wifi_version() -> std::io::Result<u16> {
+    if supports_80211ax()? {
+        Ok(6)
+    } else if supports_80211ac()? {
+        Ok(5)
+    } else if supports_80211n()? {
+        Ok(4)
+    } else if supports_80211g()? {
+        Ok(3)
+    } else if supports_5ghz_wifi()? {
+        // I don't know a proper way to check for 802.11a, but it is the first version to support
+        // 5 GHz Wi-Fi and this far down the if statement we can use this to check.
+        Ok(2)
+    } else if supports_80211b()? {
+        Ok(1)
+    } else {
+        Err(Error::new(
+            io::ErrorKind::InvalidData,
+            "Device does not support anything newer than 802.11-1997?!?!",
+        ))
+    }
 }
 
 impl Default for AppConfig {
@@ -285,17 +418,19 @@ impl Default for AppConfig {
             action_requested: None,
             ev_connector_types: None,
             enable_ssh: true,
-            hw_mode: {
-                if band_a {
-                    "a"
+            wifi_version: get_latest_wifi_version().unwrap_or(0),
+            frequency: {
+                if supports_5ghz_wifi().unwrap_or(false) {
+                    // Eventually: Add check for 6 GHz
+                    5f32
                 } else {
-                    "g"
+                    2.4
                 }
-            }
-            .to_string(),
+            },
             country_code: "US".to_string(),
             channel: {
-                if band_a {
+                if supports_5ghz_wifi().unwrap_or(false) {
+                    // Eventually: Add check for 6 GHz
                     36
                 } else {
                     6
@@ -381,7 +516,8 @@ impl AppConfig {
             doc["ev_connector_types"] = value(ev_connector_types);
         }
         doc["enable_ssh"] = value(self.enable_ssh);
-        doc["hw_mode"] = value(&self.hw_mode);
+        doc["wifi_version"] = value(self.wifi_version as i64);
+        doc["frequency"] = value(self.frequency as f64);
         doc["country_code"] = value(&self.country_code);
         doc["channel"] = value(self.channel as i64);
         doc["ssid"] = value(&self.ssid);
