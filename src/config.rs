@@ -244,6 +244,7 @@ fn supports_5ghz_wifi() -> std::io::Result<bool> {
             return Ok(true);
         }
     }
+
     Ok(false)
 }
 
