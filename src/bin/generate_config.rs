@@ -67,7 +67,7 @@ pub fn generate_config<P: AsRef<Path>>(output_path: P) -> Result<(), Box<dyn std
             // so we comment them out during config generation;
             // otherwise, we might accidentally force incorrect values.
             let commented: &str = {
-                if key == "hw_mode" || key == "channel" {
+                if key == "wifi_version" || key == "band" || key == "channel" {
                     "#"
                 } else {
                     ""
