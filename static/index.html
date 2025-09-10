@@ -68,6 +68,15 @@
             <button type="button" onclick="window.location.href='/reboot'">
               🔁 Reboot device
             </button>
+            <button id="upload-certs-btn" type="button">
+              📤 Upload MITM certs (.tar.gz)
+            </button>
+            <input
+              type="file"
+              id="cert-file"
+              accept=".tar.gz"
+              style="display: none"
+            />
           </div>
         </fieldset>
         {CONFIG_VALUES}
@@ -88,6 +97,41 @@
           `_aa-proxy-rs.log`;
         window.location.href = `/download?filename=${encodeURIComponent(filename)}`;
       });
+
+      // Upload certs button logic
+      document
+        .getElementById("upload-certs-btn")
+        .addEventListener("click", () => {
+          document.getElementById("cert-file").click();
+        });
+      document
+        .getElementById("cert-file")
+        .addEventListener("change", async () => {
+          const fileInput = document.getElementById("cert-file");
+          const file = fileInput.files[0];
+          if (!file) return; // user cancelled, just ignore
+
+          try {
+            const res = await fetch("/upload-certs", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/gzip",
+              },
+              body: file,
+            });
+
+            const text = await res.text();
+            if (res.ok) {
+              alert(`✅ ${text}`);
+            } else {
+              alert(`❌ ${text}`);
+            }
+          } catch (err) {
+            alert(`❌ Upload failed: ${err}`);
+          }
+
+          fileInput.value = ""; // reset input so same file can be re-uploaded if needed
+        });
 
       function setValue(id, value) {
         const el = document.getElementById(id);
