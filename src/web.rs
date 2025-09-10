@@ -16,12 +16,14 @@ use axum::{
     Json, Router,
 };
 use chrono::Local;
+use flate2::read::GzDecoder;
 use hyper::body::to_bytes;
 use regex::Regex;
 use simplelog::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::{io::Cursor, path::Path, sync::Arc};
+use tar::Archive;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::Sender;
@@ -31,6 +33,7 @@ const TEMPLATE: &str = include_str!("../static/index.html");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
 const AA_PROXY_RS_URL: &str = "https://github.com/aa-proxy/aa-proxy-rs";
 const BUILDROOT_URL: &str = "https://github.com/aa-proxy/buildroot";
+const CERT_DEST_DIR: &str = "/etc/aa-proxy-rs/";
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> web: </>";
@@ -53,6 +56,7 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/restart", get(restart_handler))
         .route("/reboot", get(reboot_handler))
         .route("/upload-hex-model", post(upload_hex_model_handler))
+        .route("/upload-certs", post(upload_cert_bundle_handler))
         .route("/battery", post(battery_handler))
         .with_state(state)
 }
@@ -340,6 +344,105 @@ async fn upload_hex_model_handler(
             format!("File create error: {}", err),
         ),
     }
+}
+
+pub async fn upload_cert_bundle_handler(
+    State(_state): State<Arc<AppState>>,
+    _headers: HeaderMap,
+    RawBody(body): RawBody,
+) -> impl IntoResponse {
+    // Read request body into bytes
+    let body_bytes = match hyper::body::to_bytes(body).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Unable to read body: {}", err),
+            );
+        }
+    };
+
+    // temp dir
+    let extract_to = Path::new("/tmp");
+
+    // Clean up previous unpack (optional but clean)
+    let old_path = extract_to.join("aa-proxy-rs");
+    if fs::metadata(&old_path).await.is_ok() {
+        if let Err(err) = fs::remove_dir_all(&old_path).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to clean old extracted dir: {}", err),
+            );
+        }
+    }
+
+    // Prepare GZIP decoder over the byte buffer
+    let decompressed = GzDecoder::new(Cursor::new(body_bytes));
+    let mut archive = Archive::new(decompressed);
+
+    // Unpack archive directly into /tmp
+    if let Err(err) = archive.unpack(extract_to) {
+        return (
+            StatusCode::BAD_REQUEST,
+            format!("Failed to unpack archive: {}", err),
+        );
+    }
+
+    // Iterate over extracted files
+    let mut valid_files = vec![];
+    let certs_dir = Path::new("/tmp/aa-proxy-rs");
+
+    let mut entries = match fs::read_dir(&certs_dir).await {
+        Ok(e) => e,
+        Err(err) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Missing expected 'aa-proxy-rs/' directory in archive: {}",
+                    err
+                ),
+            );
+        }
+    };
+
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        let filename = match path.file_name().and_then(|f| f.to_str()) {
+            Some(name) => name,
+            None => continue,
+        };
+
+        // Accept only .pem files
+        if filename.ends_with(".pem") {
+            valid_files.push((path.clone(), filename.to_string()));
+        }
+    }
+
+    if valid_files.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            "No valid .pem files found in archive".to_string(),
+        );
+    }
+
+    // Copy valid .pem files to destination
+    for (src_path, filename) in valid_files {
+        let dest_path = Path::new(CERT_DEST_DIR).join(filename);
+        match fs::copy(&src_path, &dest_path).await {
+            Ok(_) => {}
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to copy file: {}", err),
+                );
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        format!("Certificates uploaded to {}", CERT_DEST_DIR),
+    )
 }
 
 async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
