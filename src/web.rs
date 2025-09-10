@@ -348,9 +348,22 @@ async fn upload_hex_model_handler(
 
 pub async fn upload_cert_bundle_handler(
     State(_state): State<Arc<AppState>>,
-    _headers: HeaderMap,
+    headers: HeaderMap,
     RawBody(body): RawBody,
 ) -> impl IntoResponse {
+    // Validate Content-Type header
+    let content_type = headers
+        .get("content-type")
+        .and_then(|ct| ct.to_str().ok())
+        .unwrap_or("");
+
+    if content_type != "application/gzip" && content_type != "application/x-gzip" {
+        return (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            format!("Unsupported Content-Type: {}", content_type),
+        );
+    }
+
     // Read request body into bytes
     let body_bytes = match hyper::body::to_bytes(body).await {
         Ok(bytes) => bytes,
