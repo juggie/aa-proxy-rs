@@ -1,7 +1,10 @@
+use anyhow::anyhow;
 use crate::config::WifiConfig;
 use crate::config::IDENTITY_NAME;
+use backon::{Retryable, ExponentialBuilder};
 use bluer::adv::Advertisement;
 use bluer::{
+    Adapter,
     adv::AdvertisementHandle,
     agent::{Agent, AgentHandle},
     rfcomm::{Profile, ProfileHandle, Role, Stream},
@@ -15,7 +18,6 @@ use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
 use tokio::time::timeout;
 
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -35,6 +37,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 const AAWG_PROFILE_UUID: Uuid = Uuid::from_u128(0x4de17a0052cb11e6bdf40800200c9a66);
 const HSP_HS_UUID: Uuid = Uuid::from_u128(0x0000110800001000800000805f9b34fb);
 const HSP_AG_UUID: Uuid = Uuid::from_u128(0x0000111200001000800000805f9b34fb);
+const AV_REMOTE_CONTROL_TARGET_UUID: Uuid = Uuid::from_u128(0x0000110c00001000800000805f9b34fb);
+const AV_REMOTE_CONTROL_UUID: Uuid = Uuid::from_u128(0x00110e00001000800000805f9b34fb);
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(u16)]
@@ -176,72 +180,25 @@ async fn power_up_and_wait_for_connection(
                 if addresses.is_empty() {
                     return Ok(());
                 }
-                loop {
-                    for addr in &addresses {
-                        let device = adapter_cloned.device(*addr)?;
-                        let dev_name = match device.name().await {
-                            Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
-                            _ => String::default(),
-                        };
-                        info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
-                        if !dongle_mode {
-                            match device.connect_profile(&HSP_AG_UUID).await {
-                                Ok(_) => {
-                                    info!(
-                                        "{} 🔗 Successfully connected to device: {}{}",
-                                        NAME, addr, dev_name
-                                    );
-                                    return Ok(());
-                                }
-                                Err(e) => {
-                                    warn!(
-                                        "{} 🔇 {}{}: Error connecting: {}",
-                                        NAME, addr, dev_name, e
-                                    )
-                                }
-                            }
-                        } else {
-                            match device.connect().await {
-                                Ok(_) => {
-                                    info!(
-                                        "{} 🔗 Successfully connected to device: {}{}",
-                                        NAME, addr, dev_name
-                                    );
-                                    return Ok(());
-                                }
-                                Err(e) => {
-                                    // should be handled with the following code:
-                                    // match e.kind {bluer::ErrorKind::ConnectionAttemptFailed} ...
-                                    // but the problem is that not all errors are defined in bluer,
-                                    // so just fallback for text-searching in error :(
-                                    let error_text = e.to_string();
 
-                                    if let Some(code) =
-                                        error_text.splitn(2, ':').nth(1).map(|s| s.trim())
-                                    {
-                                        if code == "br-connection-page-timeout"
-                                            || code == "br-connection-canceled"
-                                        {
-                                            warn!(
-                                                "{} 🔇 {}{}: Error connecting: {}",
-                                                NAME, addr, dev_name, e
-                                            )
-                                        } else {
-                                            info!(
-                                            "{} 🔗 Connection success, waiting for AA profile connection: {}{}, ignored error: {}",
-                                            NAME, addr, dev_name, e
-                                        );
-                                            return Ok(());
-                                        }
-                                    } else {
-                                        warn!("{} Unknown bluetooth error: {}", NAME, e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    sleep(Duration::from_secs(1)).await;
-                }
+                let try_connect_bluetooth_addresses_retry = || try_connect_bluetooth_addresses(dongle_mode, &adapter, &addresses);
+
+                let retry_policy = ExponentialBuilder::default()
+                    .with_min_delay(Duration::from_secs(1))
+                    .with_max_delay(Duration::from_secs(15))
+                    .without_max_times();
+
+                let _connect = try_connect_bluetooth_addresses_retry
+                        // Retry with exponential backoff
+                        .retry(retry_policy)
+                        // Sleep implementation, required if no feature has been enabled
+                        .sleep(tokio::time::sleep)
+                        // Notify when retrying;
+                        .notify(|err: &Box<dyn std::error::Error + Send + Sync + 'static>, dur: Duration| {
+                            debug!("{} Retrying due to error: {:?} after {:?}", NAME, err, dur);
+                        })
+                        .await?;
+                return Ok(());
             }));
         }
     }
@@ -314,6 +271,84 @@ async fn power_up_and_wait_for_connection(
     };
 
     Ok((state, stream))
+}
+
+async fn try_connect_bluetooth_addresses(dongle_mode: bool, adapter: &Adapter, addresses: &Vec<Address>) -> Result<()> {
+    for addr in addresses {
+        let device = adapter.device(*addr)?;
+        let dev_name = match device.name().await {
+            Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
+            _ => String::default(),
+        };
+        info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
+        if let Ok(true) = adapter.device(*addr)?.is_paired().await {
+            let supported_uuids = device.uuids().await?.unwrap_or_default();
+            debug!("{} Discovered device {} with service UUIDs {:?}", NAME, addr, &supported_uuids);
+
+            if supported_uuids.contains(&AV_REMOTE_CONTROL_TARGET_UUID) && supported_uuids.contains(&AV_REMOTE_CONTROL_UUID) {
+                if !dongle_mode {
+                    match device.connect_profile(&HSP_AG_UUID).await {
+                        Ok(_) => {
+                            info!(
+                                "{} 🔗 Successfully connected to device: {}{}",
+                                NAME, addr, dev_name
+                            );
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            warn!(
+                                "{} 🔇 {}{}: Error connecting: {}",
+                                NAME, addr, dev_name, e
+                            )
+                        }
+                    }
+                } else {
+                    match device.connect().await {
+                        Ok(_) => {
+                            info!(
+                                "{} 🔗 Successfully connected to device: {}{}",
+                                NAME, addr, dev_name
+                            );
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            // should be handled with the following code:
+                            // match e.kind {bluer::ErrorKind::ConnectionAttemptFailed} ...
+                            // but the problem is that not all errors are defined in bluer,
+                            // so just fallback for text-searching in error :(
+                            let error_text = e.to_string();
+
+                            if let Some(code) =
+                                error_text.splitn(2, ':').nth(1).map(|s| s.trim())
+                            {
+                                if code == "br-connection-page-timeout"
+                                    || code == "br-connection-canceled"
+                                {
+                                    warn!(
+                                        "{} 🔇 {}{}: Error connecting: {}",
+                                        NAME, addr, dev_name, e
+                                    )
+                                } else {
+                                    info!(
+                                    "{} 🔗 Connection success, waiting for AA profile connection: {}{}, ignored error: {}",
+                                    NAME, addr, dev_name, e
+                                );
+                                    return Ok(());
+                                }
+                            } else {
+                                warn!("{} Unknown bluetooth error: {}", NAME, e);
+                            }
+                        }
+                    }
+                }
+            } else {
+                warn!("{} 🧲 Will not try to connect to: {}{} device does not have the required Android Auto device profiles", NAME, addr, dev_name);
+            }
+        } else {
+            warn!("{} 🧲 Unable to connect to: {}{} device not paired", NAME, addr, dev_name);
+        }
+    }
+    Err(anyhow!("Unable to connect to the provided addresses").into())
 }
 
 async fn send_message(
