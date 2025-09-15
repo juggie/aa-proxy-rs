@@ -14,6 +14,7 @@ use crate::config::SharedConfigJson;
 use crate::config::WifiConfig;
 use crate::config::{Action, AppConfig};
 use crate::config::{DEFAULT_WLAN_ADDR, TCP_SERVER_PORT};
+use crate::led::{LedColor, LedManager, LedMode};
 use crate::mitm::Packet;
 use bluetooth::bluetooth_setup_connection;
 use bluetooth::bluetooth_stop;
@@ -206,6 +207,13 @@ async fn tokio_main(
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
 
+    // LED support
+    let mut led_manager = if led_support {
+        Some(LedManager::new(100))
+    } else {
+        None
+    };
+
     let cfg = config.read().await.clone();
     if let Some(ref bindaddr) = cfg.webserver {
         // preparing AppState and starting webserver
@@ -264,6 +272,9 @@ async fn tokio_main(
 
     let change_usb_order = cfg.change_usb_order;
     loop {
+        if let Some(ref mut leds) = led_manager {
+            leds.set_led(LedColor::Green, LedMode::Heartbeat).await;
+        }
         if let Some(ref mut usb) = usb {
             if let Err(e) = usb.init() {
                 error!("{} 🔌 USB init error: {}", NAME, e);
@@ -321,6 +332,10 @@ async fn tokio_main(
             let _ = bt_stop.await;
         }
 
+        // inform via LED about successful connection
+        if let Some(ref mut leds) = led_manager {
+            leds.set_led(LedColor::Blue, LedMode::On).await;
+        }
         // wait for restart
         need_restart.notified().await;
 
