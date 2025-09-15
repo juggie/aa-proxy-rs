@@ -201,6 +201,7 @@ async fn tokio_main(
     config_file: PathBuf,
     tx: Arc<Mutex<Option<Sender<Packet>>>>,
     sensor_channel: Arc<Mutex<Option<u8>>>,
+    led_support: bool,
 ) -> Result<()> {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
@@ -475,8 +476,12 @@ fn main() -> Result<()> {
     }
 
     // show SBC model
+    let mut led_support = false;
     if let Ok(model) = get_sbc_model() {
         info!("{} 📟 host device: <bold><blue>{}</>", NAME, model);
+        if model == "AAWireless 2B" {
+            led_support = true;
+        }
     }
 
     // check and display config
@@ -531,6 +536,7 @@ fn main() -> Result<()> {
             args.config.clone(),
             tx_cloned,
             sensor_channel_cloned,
+            led_support,
         )
         .await
     });
