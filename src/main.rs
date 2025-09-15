@@ -3,6 +3,7 @@ mod bluetooth;
 mod config;
 mod ev;
 mod io_uring;
+mod led;
 mod mitm;
 mod usb_gadget;
 mod usb_stream;
