@@ -560,17 +560,10 @@ pub async fn pkt_modify_hook(
                         .supported_fuel_types = vec![FuelType::FUEL_TYPE_ELECTRIC.into()];
 
                     // supported connector types
-                    let connectors: Vec<EnumOrUnknown<EvConnectorType>> =
-                        match &cfg.ev_connector_types {
-                            Some(types) => types
-                                .split(',')
-                                .filter_map(|s| EvConnectorType::from_str(s.trim()))
-                                .map(EnumOrUnknown::new)
-                                .collect(),
-                            None => {
-                                vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()]
-                            }
-                        };
+                    let connectors: Vec<EnumOrUnknown<EvConnectorType>> = match &cfg.ev_connector_types {
+                        Some(types) => types.0.iter().map(|t| t.clone().into()).collect(),
+                        None => vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()],
+                    };
                     info!(
                         "{} <yellow>{:?}</>: EV connectors: {:?}",
                         get_name(proxy_type),

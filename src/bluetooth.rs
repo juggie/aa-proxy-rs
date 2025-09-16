@@ -1,14 +1,14 @@
-use anyhow::anyhow;
 use crate::config::WifiConfig;
 use crate::config::IDENTITY_NAME;
-use backon::{Retryable, ExponentialBuilder};
+use crate::config_types::BluetoothAddressList;
+use anyhow::anyhow;
+use backon::{ExponentialBuilder, Retryable};
 use bluer::adv::Advertisement;
 use bluer::{
-    Adapter,
     adv::AdvertisementHandle,
     agent::{Agent, AgentHandle},
     rfcomm::{Profile, ProfileHandle, Role, Stream},
-    Address, Uuid,
+    Adapter, Address, Uuid,
 };
 use futures::StreamExt;
 use simplelog::*;
@@ -75,7 +75,7 @@ async fn power_up_and_wait_for_connection(
     advertise: bool,
     dongle_mode: bool,
     btalias: Option<String>,
-    connect: Option<Address>,
+    connect: BluetoothAddressList,
     bt_timeout: Duration,
     stopped: bool,
 ) -> Result<(BluetoothState, Stream)> {
@@ -165,23 +165,27 @@ async fn power_up_and_wait_for_connection(
 
     // try to connect to saved devices or provided one via command line
     let mut connect_task: Option<JoinHandle<Result<()>>> = None;
-    if let Some(address) = connect {
+    if let Some(addresses_to_connect) = connect.0 {
         if !stopped {
             let adapter_cloned = adapter.clone();
 
             connect_task = Some(tokio::spawn(async move {
-                let addresses = if address == Address::any() {
+                let addresses: Vec<Address> = if addresses_to_connect
+                    .iter()
+                    .any(|addr| *addr == Address::any())
+                {
                     info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
                     adapter_cloned.device_addresses().await?
                 } else {
-                    vec![address]
+                    addresses_to_connect
                 };
-                // exit if we don't have anything to connect to
+
                 if addresses.is_empty() {
                     return Ok(());
                 }
 
-                let try_connect_bluetooth_addresses_retry = || try_connect_bluetooth_addresses(dongle_mode, &adapter, &addresses);
+                let try_connect_bluetooth_addresses_retry =
+                    || try_connect_bluetooth_addresses(dongle_mode, &adapter, &addresses);
 
                 let retry_policy = ExponentialBuilder::default()
                     .with_min_delay(Duration::from_secs(1))
@@ -189,15 +193,18 @@ async fn power_up_and_wait_for_connection(
                     .without_max_times();
 
                 let _connect = try_connect_bluetooth_addresses_retry
-                        // Retry with exponential backoff
-                        .retry(retry_policy)
-                        // Sleep implementation, required if no feature has been enabled
-                        .sleep(tokio::time::sleep)
-                        // Notify when retrying;
-                        .notify(|err: &Box<dyn std::error::Error + Send + Sync + 'static>, dur: Duration| {
+                    // Retry with exponential backoff
+                    .retry(retry_policy)
+                    // Sleep implementation, required if no feature has been enabled
+                    .sleep(tokio::time::sleep)
+                    // Notify when retrying;
+                    .notify(
+                        |err: &Box<dyn std::error::Error + Send + Sync + 'static>,
+                         dur: Duration| {
                             debug!("{} Retrying due to error: {:?} after {:?}", NAME, err, dur);
-                        })
-                        .await?;
+                        },
+                    )
+                    .await?;
                 return Ok(());
             }));
         }
@@ -273,7 +280,11 @@ async fn power_up_and_wait_for_connection(
     Ok((state, stream))
 }
 
-async fn try_connect_bluetooth_addresses(dongle_mode: bool, adapter: &Adapter, addresses: &Vec<Address>) -> Result<()> {
+async fn try_connect_bluetooth_addresses(
+    dongle_mode: bool,
+    adapter: &Adapter,
+    addresses: &Vec<Address>,
+) -> Result<()> {
     for addr in addresses {
         let device = adapter.device(*addr)?;
         let dev_name = match device.name().await {
@@ -283,9 +294,14 @@ async fn try_connect_bluetooth_addresses(dongle_mode: bool, adapter: &Adapter, a
         info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
         if let Ok(true) = adapter.device(*addr)?.is_paired().await {
             let supported_uuids = device.uuids().await?.unwrap_or_default();
-            debug!("{} Discovered device {} with service UUIDs {:?}", NAME, addr, &supported_uuids);
+            debug!(
+                "{} Device {} has supported UUIDs {:?}",
+                NAME, addr, &supported_uuids
+            );
 
-            if supported_uuids.contains(&AV_REMOTE_CONTROL_TARGET_UUID) && supported_uuids.contains(&AV_REMOTE_CONTROL_UUID) {
+            if supported_uuids.contains(&AV_REMOTE_CONTROL_TARGET_UUID)
+                && supported_uuids.contains(&AV_REMOTE_CONTROL_UUID)
+            {
                 if !dongle_mode {
                     match device.connect_profile(&HSP_AG_UUID).await {
                         Ok(_) => {
@@ -296,10 +312,7 @@ async fn try_connect_bluetooth_addresses(dongle_mode: bool, adapter: &Adapter, a
                             return Ok(());
                         }
                         Err(e) => {
-                            warn!(
-                                "{} 🔇 {}{}: Error connecting: {}",
-                                NAME, addr, dev_name, e
-                            )
+                            warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e)
                         }
                     }
                 } else {
@@ -318,9 +331,7 @@ async fn try_connect_bluetooth_addresses(dongle_mode: bool, adapter: &Adapter, a
                             // so just fallback for text-searching in error :(
                             let error_text = e.to_string();
 
-                            if let Some(code) =
-                                error_text.splitn(2, ':').nth(1).map(|s| s.trim())
-                            {
+                            if let Some(code) = error_text.splitn(2, ':').nth(1).map(|s| s.trim()) {
                                 if code == "br-connection-page-timeout"
                                     || code == "br-connection-canceled"
                                 {
@@ -342,10 +353,13 @@ async fn try_connect_bluetooth_addresses(dongle_mode: bool, adapter: &Adapter, a
                     }
                 }
             } else {
-                warn!("{} 🧲 Will not try to connect to: {}{} device does not have the required Android Auto device profiles", NAME, addr, dev_name);
+                warn!("{} 🧲 Will not try to connect to: {}{} device does not have the required Android Auto profile UUIDs", NAME, addr, dev_name);
             }
         } else {
-            warn!("{} 🧲 Unable to connect to: {}{} device not paired", NAME, addr, dev_name);
+            warn!(
+                "{} 🧲 Unable to connect to: {}{} device not paired",
+                NAME, addr, dev_name
+            );
         }
     }
     Err(anyhow!("Unable to connect to the provided addresses").into())
@@ -461,7 +475,7 @@ pub async fn bluetooth_setup_connection(
     advertise: bool,
     dongle_mode: bool,
     btalias: Option<String>,
-    connect: Option<Address>,
+    connect: BluetoothAddressList,
     wifi_config: WifiConfig,
     tcp_start: Arc<Notify>,
     bt_timeout: Duration,

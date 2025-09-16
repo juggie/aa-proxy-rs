@@ -1,18 +1,13 @@
+use crate::config_types::{BluetoothAddressList, EvConnectorTypes, UsbId};
 use bluer::Address;
 use indexmap::IndexMap;
-use serde::de::{self, Deserializer, Error as DeError, Visitor};
+use serde::de::{self, Deserializer, Error as DeError};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use simplelog::*;
 use std::io::Error;
 use std::process::Command;
-use std::{
-    fmt::{self, Display},
-    fs, io,
-    path::PathBuf,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{fmt::Display, fs, io, path::PathBuf, str::FromStr, sync::Arc};
 use tokio::sync::RwLock;
 use toml_edit::{value, DocumentMut};
 
@@ -52,58 +47,6 @@ pub enum HexdumpLevel {
     DecryptedOutput,
     RawOutput,
     All,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct UsbId {
-    pub vid: u16,
-    pub pid: u16,
-}
-
-impl std::str::FromStr for UsbId {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split(':').collect();
-        if parts.len() != 2 {
-            return Err("Expected format VID:PID".to_string());
-        }
-        let vid = u16::from_str_radix(parts[0], 16).map_err(|e| e.to_string())?;
-        let pid = u16::from_str_radix(parts[1], 16).map_err(|e| e.to_string())?;
-        Ok(UsbId { vid, pid })
-    }
-}
-
-impl fmt::Display for UsbId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}:{:x}", self.vid, self.pid)
-    }
-}
-
-impl<'de> Deserialize<'de> for UsbId {
-    fn deserialize<D>(deserializer: D) -> Result<UsbId, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct UsbIdVisitor;
-
-        impl<'de> Visitor<'de> for UsbIdVisitor {
-            type Value = UsbId;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a string in the format VID:PID")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<UsbId, E>
-            where
-                E: de::Error,
-            {
-                UsbId::from_str(value).map_err(de::Error::custom)
-            }
-        }
-
-        deserializer.deserialize_str(UsbIdVisitor)
-    }
 }
 
 pub fn empty_string_as_none<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -155,8 +98,7 @@ pub struct AppConfig {
     pub hexdump_level: HexdumpLevel,
     pub disable_console_debug: bool,
     pub legacy: bool,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub connect: Option<Address>,
+    pub connect: BluetoothAddressList,
     pub logfile: PathBuf,
     pub stats_interval: u16,
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -190,8 +132,7 @@ pub struct AppConfig {
     pub waze_lht_workaround: bool,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub ev_battery_logger: Option<String>,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub ev_connector_types: Option<String>,
+    pub ev_connector_types: Option<EvConnectorTypes>,
     pub enable_ssh: bool,
     pub wifi_version: u16,
     pub band: f32,
@@ -293,7 +234,9 @@ impl Default for AppConfig {
             hexdump_level: HexdumpLevel::Disabled,
             disable_console_debug: false,
             legacy: true,
-            connect: Some(Address::from_str("00:00:00:00:00:00").unwrap()),
+            connect: BluetoothAddressList(Some(vec![
+                Address::from_str("00:00:00:00:00:00").unwrap()
+            ])),
             logfile: "/var/log/aa-proxy-rs.log".into(),
             stats_interval: 0,
             udc: None,
@@ -320,7 +263,7 @@ impl Default for AppConfig {
             waze_lht_workaround: false,
             ev_battery_logger: None,
             action_requested: None,
-            ev_connector_types: None,
+            ev_connector_types: Some(EvConnectorTypes::default()),
             enable_ssh: true,
             wifi_version: get_latest_wifi_version().unwrap_or(1),
             band: {
@@ -350,6 +293,15 @@ impl Default for AppConfig {
 impl AppConfig {
     const CONFIG_JSON: &str = include_str!("../static/config.json");
 
+    fn save_optional_field<T>(doc: &mut DocumentMut, key: &str, optional_value: &Option<T>)
+    where
+        T: Into<toml_edit::Value> + Clone,
+    {
+        if let Some(v) = optional_value {
+            doc[key] = value(v.clone());
+        }
+    }
+
     pub fn load(config_file: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         use ::config::File;
         let file_config: AppConfig = ::config::Config::builder()
@@ -375,24 +327,15 @@ impl AppConfig {
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
         doc["disable_console_debug"] = value(self.disable_console_debug);
         doc["legacy"] = value(self.legacy);
-        doc["connect"] = match &self.connect {
-            Some(c) => value(c.to_string()),
-            None => value(""),
-        };
+        doc["connect"] = value(self.connect.to_string());
         doc["logfile"] = value(self.logfile.display().to_string());
         doc["stats_interval"] = value(self.stats_interval as i64);
-        if let Some(udc) = &self.udc {
-            doc["udc"] = value(udc);
-        }
+        AppConfig::save_optional_field(&mut doc, "udc", &self.udc);
         doc["iface"] = value(&self.iface);
         doc["hostapd_conf"] = value(self.hostapd_conf.display().to_string());
-        if let Some(alias) = &self.btalias {
-            doc["btalias"] = value(alias);
-        }
+        AppConfig::save_optional_field(&mut doc, "btalias", &self.btalias);
         doc["timeout_secs"] = value(self.timeout_secs as i64);
-        if let Some(webserver) = &self.webserver {
-            doc["webserver"] = value(webserver);
-        }
+        AppConfig::save_optional_field(&mut doc, "webserver", &self.webserver);
         doc["bt_timeout_secs"] = value(self.bt_timeout_secs as i64);
         doc["mitm"] = value(self.mitm);
         doc["dpi"] = value(self.dpi as i64);
@@ -413,11 +356,9 @@ impl AppConfig {
         doc["change_usb_order"] = value(self.change_usb_order);
         doc["stop_on_disconnect"] = value(self.stop_on_disconnect);
         doc["waze_lht_workaround"] = value(self.waze_lht_workaround);
-        if let Some(path) = &self.ev_battery_logger {
-            doc["ev_battery_logger"] = value(path);
-        }
-        if let Some(ev_connector_types) = &self.ev_connector_types {
-            doc["ev_connector_types"] = value(ev_connector_types);
+        AppConfig::save_optional_field(&mut doc, "ev_battery_logger", &self.ev_battery_logger);
+        if let Some(types) = &self.ev_connector_types {
+            doc["ev_connector_types"] = value(types.to_string());
         }
         doc["enable_ssh"] = value(self.enable_ssh);
         doc["wifi_version"] = value(self.wifi_version as i64);

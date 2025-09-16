@@ -1,6 +1,7 @@
 mod aoa;
 mod bluetooth;
 mod config;
+mod config_types;
 mod ev;
 mod io_uring;
 mod mitm;
