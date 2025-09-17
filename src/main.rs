@@ -458,7 +458,17 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // parse config
-    let config = AppConfig::load(args.config.clone()).unwrap();
+    let config = match AppConfig::load(args.config.clone()) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!(
+                "Failed to start aa-proxy-rs due to invalid configuration in: {}.  Error:\n{}",
+                args.config.display(),
+                e
+            );
+            std::process::exit(1);
+        }
+    };
     let config_json = AppConfig::load_config_json().expect("Invalid embedded config.json");
 
     logging_init(config.debug, config.disable_console_debug, &config.logfile);
