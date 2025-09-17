@@ -1,5 +1,4 @@
 use crate::config_types::{BluetoothAddressList, EvConnectorTypes, UsbId};
-use bluer::Address;
 use indexmap::IndexMap;
 use serde::de::{Deserializer, Error as DeError};
 use serde::{Deserialize, Serialize};
@@ -234,9 +233,7 @@ impl Default for AppConfig {
             hexdump_level: HexdumpLevel::Disabled,
             disable_console_debug: false,
             legacy: true,
-            connect: BluetoothAddressList(Some(vec![
-                Address::from_str("00:00:00:00:00:00").unwrap()
-            ])),
+            connect: BluetoothAddressList::default(),
             logfile: "/var/log/aa-proxy-rs.log".into(),
             stats_interval: 0,
             udc: None,

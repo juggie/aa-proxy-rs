@@ -69,6 +69,12 @@ impl fmt::Display for BluetoothAddressList {
     }
 }
 
+impl Default for BluetoothAddressList {
+    fn default() -> Self {
+        BluetoothAddressList(Some(vec![Address::any()]))
+    }
+}
+
 impl std::str::FromStr for EvConnectorType {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
