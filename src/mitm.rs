@@ -28,8 +28,8 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
-use crate::config::HexdumpLevel;
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
+use crate::config_types::HexdumpLevel;
 use crate::ev::EvTaskCommand;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
