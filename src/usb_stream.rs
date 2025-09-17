@@ -16,7 +16,7 @@ use crate::aoa::{
     AccessoryConfigurations, AccessoryDeviceInfo, AccessoryError, AccessoryInterface,
     AccessoryStrings, EndpointError,
 };
-use crate::config::UsbId;
+use crate::config_types::UsbId;
 
 #[derive(Debug, Error)]
 pub enum ConnectError {
