@@ -389,13 +389,14 @@ pub async fn pkt_modify_hook(
     match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
         MESSAGE_BYEBYE_REQUEST => {
             if cfg.stop_on_disconnect && proxy_type == ProxyType::MobileDevice {
-                let msg = ByeByeRequest::parse_from_bytes(data)?;
-                if msg.reason.unwrap_or_default() == USER_SELECTION.into() {
-                    info!(
+                if let Ok(msg) = ByeByeRequest::parse_from_bytes(data) {
+                    if msg.reason.unwrap_or_default() == USER_SELECTION.into() {
+                        info!(
                         "{} <bold><blue>Disconnect</> option selected in Android Auto; auto-connect temporarily disabled",
                         get_name(proxy_type),
                     );
-                    config.write().await.action_requested = Some(Stop);
+                        config.write().await.action_requested = Some(Stop);
+                    }
                 }
             }
         }
@@ -404,7 +405,17 @@ pub async fn pkt_modify_hook(
             if proxy_type == ProxyType::MobileDevice {
                 return Ok(false);
             }
-            let mut msg = ServiceDiscoveryResponse::parse_from_bytes(data)?;
+            let mut msg = match ServiceDiscoveryResponse::parse_from_bytes(data) {
+                Err(e) => {
+                    error!(
+                        "{} error parsing SDR: {}, ignored!",
+                        get_name(proxy_type),
+                        e
+                    );
+                    return Ok(false);
+                }
+                Ok(msg) => msg,
+            };
 
             // DPI
             if cfg.dpi > 0 {
