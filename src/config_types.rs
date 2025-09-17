@@ -1,3 +1,4 @@
+use crate::mitm::protos::EvConnectorType;
 use bluer::Address;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, str::FromStr};
@@ -39,13 +40,13 @@ impl<'de> Deserialize<'de> for BluetoothAddressList {
 
                 if wildcard_present && addrs.len() > 1 {
                     return Err(de::Error::custom(
-                        "wildcard address '00:00:00:00:00:00' cannot be combined with other addresses"
+                        "'connect' - Wildcard address '00:00:00:00:00:00' cannot be combined with other addresses"
                     ));
                 }
                 Ok(BluetoothAddressList(Some(addrs)))
             }
             Err(e) => Err(de::Error::custom(format!(
-                "failed to parse addresses: {}",
+                "'connect' - Failed to parse addresses: {}",
                 e
             ))),
         }
@@ -68,17 +69,6 @@ impl fmt::Display for BluetoothAddressList {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum EvConnectorType {
-    EV_CONNECTOR_TYPE_J1772,
-    EV_CONNECTOR_TYPE_MENNEKES,
-    EV_CONNECTOR_TYPE_CHADEMO,
-    EV_CONNECTOR_TYPE_COMBO_1,
-    EV_CONNECTOR_TYPE_COMBO_2,
-    EV_CONNECTOR_TYPE_TESLA_SUPERCHARGER,
-    EV_CONNECTOR_TYPE_GBT,
-}
-
 impl std::str::FromStr for EvConnectorType {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -88,7 +78,9 @@ impl std::str::FromStr for EvConnectorType {
             "EV_CONNECTOR_TYPE_CHADEMO" => Ok(EvConnectorType::EV_CONNECTOR_TYPE_CHADEMO),
             "EV_CONNECTOR_TYPE_COMBO_1" => Ok(EvConnectorType::EV_CONNECTOR_TYPE_COMBO_1),
             "EV_CONNECTOR_TYPE_COMBO_2" => Ok(EvConnectorType::EV_CONNECTOR_TYPE_COMBO_2),
-            "EV_CONNECTOR_TYPE_TESLA_SUPERCHARGER" => Ok(EvConnectorType::EV_CONNECTOR_TYPE_TESLA_SUPERCHARGER),
+            "EV_CONNECTOR_TYPE_TESLA_SUPERCHARGER" => {
+                Ok(EvConnectorType::EV_CONNECTOR_TYPE_TESLA_SUPERCHARGER)
+            }
             "EV_CONNECTOR_TYPE_GBT" => Ok(EvConnectorType::EV_CONNECTOR_TYPE_GBT),
             _ => Err(format!("Unknown EV connector type: {}", s)),
         }
@@ -106,7 +98,8 @@ pub struct EvConnectorTypes(pub Vec<EvConnectorType>);
 
 impl EvConnectorTypes {
     fn to_string_internal(&self) -> String {
-        self.0.iter()
+        self.0
+            .iter()
             .map(|t| format!("{:?}", t))
             .collect::<Vec<String>>()
             .join(",")
@@ -130,15 +123,18 @@ impl<'de> Deserialize<'de> for EvConnectorTypes {
             for part in s.split(',') {
                 let trimmed = part.trim();
                 if !trimmed.is_empty() {
-                    let connector_type = trimmed.parse::<EvConnectorType>()
+                    let connector_type = trimmed
+                        .parse::<EvConnectorType>()
                         .map_err(de::Error::custom)?;
                     types.push(connector_type);
                 }
             }
         }
-        
+
         if types.is_empty() {
-            Ok(EvConnectorTypes(vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES]))
+            Ok(EvConnectorTypes(vec![
+                EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES,
+            ]))
         } else {
             Ok(EvConnectorTypes(types))
         }

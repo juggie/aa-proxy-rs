@@ -1,33 +1,22 @@
-mod aoa;
-mod bluetooth;
-mod config;
-mod config_types;
-mod ev;
-mod io_uring;
-mod mitm;
-mod usb_gadget;
-mod usb_stream;
-mod web;
-
-use crate::config::SharedConfig;
-use crate::config::SharedConfigJson;
-use crate::config::WifiConfig;
-use crate::config::{Action, AppConfig};
-use crate::config::{DEFAULT_WLAN_ADDR, TCP_SERVER_PORT};
-use crate::mitm::Packet;
-use bluetooth::bluetooth_setup_connection;
-use bluetooth::bluetooth_stop;
+use aa_proxy_rs::bluetooth::bluetooth_setup_connection;
+use aa_proxy_rs::bluetooth::bluetooth_stop;
+use aa_proxy_rs::config::SharedConfig;
+use aa_proxy_rs::config::SharedConfigJson;
+use aa_proxy_rs::config::WifiConfig;
+use aa_proxy_rs::config::{Action, AppConfig};
+use aa_proxy_rs::config::{DEFAULT_WLAN_ADDR, TCP_SERVER_PORT};
+use aa_proxy_rs::io_uring::io_loop;
+use aa_proxy_rs::mitm::Packet;
+use aa_proxy_rs::usb_gadget::uevent_listener;
+use aa_proxy_rs::usb_gadget::UsbGadgetState;
+use aa_proxy_rs::web;
 use clap::Parser;
 use humantime::format_duration;
-use io_uring::io_loop;
 use simple_config_parser::Config;
 use simplelog::*;
-use std::os::unix::fs::PermissionsExt;
-use usb_gadget::uevent_listener;
-use usb_gadget::UsbGadgetState;
-
 use std::fs;
 use std::fs::OpenOptions;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
@@ -442,7 +431,17 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // parse config
-    let config = AppConfig::load(args.config.clone()).unwrap();
+    let config = match AppConfig::load(args.config.clone()) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!(
+                "Failed to start aa-proxy-rs due to invalid configuration in: {}.  Error: {}",
+                args.config.display(),
+                e
+            );
+            std::process::exit(1);
+        }
+    };
     let config_json = AppConfig::load_config_json().expect("Invalid embedded config.json");
 
     logging_init(config.debug, config.disable_console_debug, &config.logfile);
