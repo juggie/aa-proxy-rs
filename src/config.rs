@@ -352,13 +352,17 @@ impl AppConfig {
 
     pub fn load(config_file: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         use ::config::File;
-        let file_config: AppConfig = ::config::Config::builder()
-            .add_source(File::from(config_file).required(false))
-            .build()?
-            .try_deserialize()
-            .unwrap_or_default();
+        let config_builder = ::config::Config::builder()
+            .add_source(File::from(config_file.clone()).required(false))
+            .build()?;
 
-        Ok(file_config)
+        let file_config = config_builder.try_deserialize();
+
+        if let Err(e) = file_config {
+            return Err(Box::new(e));
+        }
+
+        Ok(file_config.unwrap())
     }
 
     pub fn save(&self, config_file: PathBuf) {
