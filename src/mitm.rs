@@ -345,7 +345,7 @@ pub async fn pkt_modify_hook(
     if let Some(ch) = ctx.nav_channel {
         // check for channel and a specific packet header only
         if ch == pkt.channel
-            && proxy_type == ProxyType::MobileDevice
+            && proxy_type == ProxyType::HeadUnit
             && pkt.payload[0] == 0x80
             && pkt.payload[1] == 0x06
             && pkt.payload[2] == 0x0A

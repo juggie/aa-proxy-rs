@@ -6,6 +6,7 @@ use aa_proxy_rs::config::WifiConfig;
 use aa_proxy_rs::config::{Action, AppConfig};
 use aa_proxy_rs::config::{DEFAULT_WLAN_ADDR, TCP_SERVER_PORT};
 use aa_proxy_rs::io_uring::io_loop;
+use aa_proxy_rs::led::{LedColor, LedManager, LedMode};
 use aa_proxy_rs::mitm::Packet;
 use aa_proxy_rs::usb_gadget::uevent_listener;
 use aa_proxy_rs::usb_gadget::UsbGadgetState;
@@ -190,9 +191,17 @@ async fn tokio_main(
     config_file: PathBuf,
     tx: Arc<Mutex<Option<Sender<Packet>>>>,
     sensor_channel: Arc<Mutex<Option<u8>>>,
+    led_support: bool,
 ) -> Result<()> {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
+
+    // LED support
+    let mut led_manager = if led_support {
+        Some(LedManager::new(100))
+    } else {
+        None
+    };
 
     let cfg = config.read().await.clone();
     if let Some(ref bindaddr) = cfg.webserver {
@@ -252,6 +261,9 @@ async fn tokio_main(
 
     let change_usb_order = cfg.change_usb_order;
     loop {
+        if let Some(ref mut leds) = led_manager {
+            leds.set_led(LedColor::Green, LedMode::Heartbeat).await;
+        }
         if let Some(ref mut usb) = usb {
             if let Err(e) = usb.init() {
                 error!("{} 🔌 USB init error: {}", NAME, e);
@@ -309,6 +321,10 @@ async fn tokio_main(
             let _ = bt_stop.await;
         }
 
+        // inform via LED about successful connection
+        if let Some(ref mut leds) = led_manager {
+            leds.set_led(LedColor::Blue, LedMode::On).await;
+        }
         // wait for restart
         need_restart.notified().await;
 
@@ -435,7 +451,7 @@ fn main() -> Result<()> {
         Ok(cfg) => cfg,
         Err(e) => {
             eprintln!(
-                "Failed to start aa-proxy-rs due to invalid configuration in: {}.  Error: {}",
+                "Failed to start aa-proxy-rs due to invalid configuration in: {}.  Error:\r\n{}",
                 args.config.display(),
                 e
             );
@@ -474,8 +490,12 @@ fn main() -> Result<()> {
     }
 
     // show SBC model
+    let mut led_support = false;
     if let Ok(model) = get_sbc_model() {
         info!("{} 📟 host device: <bold><blue>{}</>", NAME, model);
+        if model == "AAWireless 2B" {
+            led_support = true;
+        }
     }
 
     // check and display config
@@ -530,6 +550,7 @@ fn main() -> Result<()> {
             args.config.clone(),
             tx_cloned,
             sensor_channel_cloned,
+            led_support,
         )
         .await
     });
