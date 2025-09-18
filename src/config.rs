@@ -1,5 +1,4 @@
-use crate::config_types::{HexdumpLevel, UsbId};
-use bluer::Address;
+use crate::config_types::{BluetoothAddressList, HexdumpLevel, UsbId};
 use indexmap::IndexMap;
 use serde::de::{Deserializer, Error as DeError};
 use serde::{Deserialize, Serialize};
@@ -85,8 +84,7 @@ pub struct AppConfig {
     pub hexdump_level: HexdumpLevel,
     pub disable_console_debug: bool,
     pub legacy: bool,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub connect: Option<Address>,
+    pub connect: BluetoothAddressList,
     pub logfile: PathBuf,
     pub stats_interval: u16,
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -223,7 +221,7 @@ impl Default for AppConfig {
             hexdump_level: HexdumpLevel::Disabled,
             disable_console_debug: false,
             legacy: true,
-            connect: Some(Address::from_str("00:00:00:00:00:00").unwrap()),
+            connect: BluetoothAddressList::default(),
             logfile: "/var/log/aa-proxy-rs.log".into(),
             stats_interval: 0,
             udc: None,
@@ -309,10 +307,7 @@ impl AppConfig {
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
         doc["disable_console_debug"] = value(self.disable_console_debug);
         doc["legacy"] = value(self.legacy);
-        doc["connect"] = match &self.connect {
-            Some(c) => value(c.to_string()),
-            None => value(""),
-        };
+        doc["connect"] = value(self.connect.to_string());
         doc["logfile"] = value(self.logfile.display().to_string());
         doc["stats_interval"] = value(self.stats_interval as i64);
         if let Some(udc) = &self.udc {

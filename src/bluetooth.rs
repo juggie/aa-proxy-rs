@@ -1,5 +1,6 @@
 use crate::config::WifiConfig;
 use crate::config::IDENTITY_NAME;
+use crate::config_types::BluetoothAddressList;
 use anyhow::anyhow;
 use backon::{ExponentialBuilder, Retryable};
 use bluer::adv::Advertisement;
@@ -74,7 +75,7 @@ async fn power_up_and_wait_for_connection(
     advertise: bool,
     dongle_mode: bool,
     btalias: Option<String>,
-    connect: Option<Address>,
+    connect: BluetoothAddressList,
     bt_timeout: Duration,
     stopped: bool,
 ) -> Result<(BluetoothState, Stream)> {
@@ -164,22 +165,26 @@ async fn power_up_and_wait_for_connection(
 
     // try to connect to saved devices or provided one via command line
     let mut connect_task: Option<JoinHandle<Result<()>>> = None;
-    if let Some(address) = connect {
+    if let Some(addresses_to_connect) = connect.0 {
         if !stopped {
             let adapter_cloned = adapter.clone();
 
             connect_task = Some(tokio::spawn(async move {
-                let addresses = if address == Address::any() {
+                let addresses: Vec<Address> = if addresses_to_connect
+                    .iter()
+                    .any(|addr| *addr == Address::any())
+                {
                     info!("{} 🥏 Enumerating known bluetooth devices...", NAME);
                     adapter_cloned.device_addresses().await?
                 } else {
-                    vec![address]
+                    addresses_to_connect
                 };
                 // exit if we don't have anything to connect to
                 if addresses.is_empty() {
                     return Ok(());
                 }
 
+                warn!("{} 🧲 Attempting to start an AndroidAuto session via bluetooth with the following devices, in this order: {:?}", NAME, addresses);
                 let try_connect_bluetooth_addresses_retry =
                     || try_connect_bluetooth_addresses(dongle_mode, &adapter, &addresses);
 
@@ -471,7 +476,7 @@ pub async fn bluetooth_setup_connection(
     advertise: bool,
     dongle_mode: bool,
     btalias: Option<String>,
-    connect: Option<Address>,
+    connect: BluetoothAddressList,
     wifi_config: WifiConfig,
     tcp_start: Arc<Notify>,
     bt_timeout: Duration,
