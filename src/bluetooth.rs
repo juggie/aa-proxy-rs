@@ -184,7 +184,7 @@ async fn power_up_and_wait_for_connection(
                     return Ok(());
                 }
 
-                warn!("{} 🧲 Attempting to start an AndroidAuto session via bluetooth with the following devices, in this order: {:?}", NAME, addresses);
+                info!("{} 🧲 Attempting to start an AndroidAuto session via bluetooth with the following devices, in this order: {:?}", NAME, addresses);
                 let try_connect_bluetooth_addresses_retry =
                     || try_connect_bluetooth_addresses(dongle_mode, &adapter, &addresses);
 
