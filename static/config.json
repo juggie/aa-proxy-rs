@@ -112,7 +112,7 @@
         },
         "connect": {
           "typ": "string",
-          "description": "Auto-connect to phone and initiate connection\nempty string/no value: don't auto-connect,\nzeros/wildcard: iterate over all previously connected devices,\nset it to phone BT MAC address for connecting to this specific phone"
+          "description": "Auto-connect to phone and initiate connection\nempty string/no value: don't auto-connect,\nzeros: iterate over all previously connected devices,\nmay be set to a comma seperated list of phone BT MAC addresses for connecting to a specific list of phones, wildcard may not be used with list"
         },
         "bt_timeout_secs": {
           "typ": "integer",
