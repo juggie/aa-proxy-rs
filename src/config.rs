@@ -1,4 +1,4 @@
-use crate::config_types::{BluetoothAddressList, HexdumpLevel, UsbId};
+use crate::config_types::{BluetoothAddressList, EvConnectorTypes, HexdumpLevel, UsbId};
 use indexmap::IndexMap;
 use serde::de::{Deserializer, Error as DeError};
 use serde::{Deserialize, Serialize};
@@ -118,8 +118,7 @@ pub struct AppConfig {
     pub waze_lht_workaround: bool,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub ev_battery_logger: Option<String>,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub ev_connector_types: Option<String>,
+    pub ev_connector_types: EvConnectorTypes,
     pub enable_ssh: bool,
     pub wifi_version: u16,
     pub band: f32,
@@ -248,7 +247,7 @@ impl Default for AppConfig {
             waze_lht_workaround: false,
             ev_battery_logger: None,
             action_requested: None,
-            ev_connector_types: None,
+            ev_connector_types: EvConnectorTypes::default(),
             enable_ssh: true,
             wifi_version: get_latest_wifi_version().unwrap_or(1),
             band: {
@@ -345,9 +344,7 @@ impl AppConfig {
         if let Some(path) = &self.ev_battery_logger {
             doc["ev_battery_logger"] = value(path);
         }
-        if let Some(ev_connector_types) = &self.ev_connector_types {
-            doc["ev_connector_types"] = value(ev_connector_types);
-        }
+        doc["ev_connector_types"] = value(self.ev_connector_types.to_string());
         doc["enable_ssh"] = value(self.enable_ssh);
         doc["wifi_version"] = value(self.wifi_version as i64);
         doc["band"] = value(self.band as f64);

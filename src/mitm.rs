@@ -572,12 +572,8 @@ pub async fn pkt_modify_hook(
 
                     // supported connector types
                     let connectors: Vec<EnumOrUnknown<EvConnectorType>> =
-                        match &cfg.ev_connector_types {
-                            Some(types) => types
-                                .split(',')
-                                .filter_map(|s| EvConnectorType::from_str(s.trim()))
-                                .map(EnumOrUnknown::new)
-                                .collect(),
+                        match &cfg.ev_connector_types.0 {
+                            Some(types) => types.iter().map(|&t| t.into()).collect(),
                             None => {
                                 vec![EvConnectorType::EV_CONNECTOR_TYPE_MENNEKES.into()]
                             }

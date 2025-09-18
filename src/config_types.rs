@@ -1,3 +1,5 @@
+use crate::mitm;
+use crate::mitm::protos::EvConnectorType;
 use bluer::Address;
 use serde::{
     de::{self, Visitor},
@@ -74,6 +76,78 @@ impl fmt::Display for BluetoothAddressList {
 impl Default for BluetoothAddressList {
     fn default() -> Self {
         BluetoothAddressList(Some(vec![Address::any()]))
+    }
+}
+
+impl std::str::FromStr for EvConnectorType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <mitm::protos::EvConnectorType as protobuf::Enum>::from_str(s.trim())
+            .ok_or_else(|| format!("Unknown EV connector type: {}", s))
+    }
+}
+
+impl fmt::Display for EvConnectorType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct EvConnectorTypes(pub Option<Vec<EvConnectorType>>);
+
+impl EvConnectorTypes {
+    fn to_string_internal(&self) -> String {
+        self.0
+            .iter()
+            .map(|t| format!("{:?}", t))
+            .collect::<Vec<String>>()
+            .join(",")
+    }
+}
+
+impl<'de> Deserialize<'de> for EvConnectorTypes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let mut types = Vec::new();
+        if !s.is_empty() {
+            for part in s.split(',') {
+                let trimmed = part.trim();
+                if !trimmed.is_empty() {
+                    let connector_type = trimmed
+                        .parse::<EvConnectorType>()
+                        .map_err(de::Error::custom)?;
+                    types.push(connector_type);
+                }
+            }
+        }
+
+        if types.is_empty() {
+            Ok(EvConnectorTypes(None))
+        } else {
+            Ok(EvConnectorTypes(Some(types)))
+        }
+    }
+}
+
+impl Serialize for EvConnectorTypes {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = self.to_string_internal();
+        serializer.serialize_str(&s)
+    }
+}
+
+impl fmt::Display for EvConnectorTypes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = self.to_string_internal();
+        write!(f, "{}", s)
     }
 }
 
