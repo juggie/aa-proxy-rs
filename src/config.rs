@@ -127,6 +127,7 @@ pub struct AppConfig {
     pub ssid: String,
     pub wpa_passphrase: String,
     pub eth_mode: String,
+    pub startup_delay: u8,
 
     #[serde(skip)]
     pub action_requested: Option<Action>,
@@ -270,6 +271,7 @@ impl Default for AppConfig {
             ssid: String::from(IDENTITY_NAME),
             wpa_passphrase: String::from(IDENTITY_NAME),
             eth_mode: String::default(),
+            startup_delay: 0,
         }
     }
 }
@@ -353,6 +355,7 @@ impl AppConfig {
         doc["ssid"] = value(&self.ssid);
         doc["wpa_passphrase"] = value(&self.wpa_passphrase);
         doc["eth_mode"] = value(&self.eth_mode);
+        doc["startup_delay"] = value(self.startup_delay as i64);
 
         let _ = fs::write(config_file, doc.to_string());
     }

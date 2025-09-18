@@ -22,6 +22,7 @@ use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 use tokio::runtime::Builder;
 use tokio::sync::mpsc::Sender;
@@ -526,6 +527,13 @@ fn main() -> Result<()> {
         NAME,
         config.logfile.display()
     );
+    if config.startup_delay > 0 {
+        thread::sleep(Duration::from_secs(config.startup_delay.into()));
+        info!(
+            "{} 💤 Startup delayed by <b><blue>{}</> seconds",
+            NAME, config.startup_delay
+        );
+    }
 
     // notify for syncing threads
     let need_restart = Arc::new(Notify::new());

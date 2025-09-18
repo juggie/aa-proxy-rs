@@ -67,6 +67,10 @@
         "udc": {
           "typ": "string",
           "description": "UDC Controller name (used in special configurations)"
+        },
+        "startup_delay": {
+          "typ": "integer",
+          "description": "Enables delaying the launch of `aa-proxy-rs` by a specified number of seconds (range: 0–254).\nDefault value: 0.\nIntended for specific scenarios (e.g., non-standard head units)"
         }
       }
     },
