@@ -76,7 +76,7 @@
             <button type="button" id="backupBtn">
               📦 Backup configuration (.tar.gz)
             </button>
-            <button type="button" data-endpoint="/userdata_restore">
+            <button type="button" data-endpoint="/userdata-restore">
               📤 Restore configuration (.tar.gz)
             </button>
             <input
@@ -98,7 +98,7 @@
       });
 
       document.getElementById("backupBtn").addEventListener("click", () => {
-        triggerDownload("/userdata_backup", "backup");
+        triggerDownload("/userdata-backup", "backup");
       });
 
       // upload buttons event listeners

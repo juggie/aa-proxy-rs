@@ -68,8 +68,8 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/upload-hex-model", post(upload_hex_model_handler))
         .route("/upload-certs", post(upload_cert_bundle_handler))
         .route("/battery", post(battery_handler))
-        .route("/userdata_backup", get(userdata_backup_handler))
-        .route("/userdata_restore", post(userdata_restore_handler))
+        .route("/userdata-backup", get(userdata_backup_handler))
+        .route("/userdata-restore", post(userdata_restore_handler))
         .with_state(state)
 }
 
