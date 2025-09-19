@@ -61,7 +61,9 @@
           <legend class="section-title"><strong>🚀 ACTIONS</strong></legend>
           <div class="grid grid-cols-2 section-body">
             <button type="button" onclick="saveConfig()">💾 Save</button>
-            <button type="button" id="downloadBtn">📥 Download log package (.tar.gz)</button>
+            <button type="button" id="downloadBtn">
+              📜 Download log package (.tar.gz)
+            </button>
             <button type="button" onclick="window.location.href='/restart'">
               🧬 Apply / restart
             </button>
@@ -70,6 +72,9 @@
             </button>
             <button id="upload-certs-btn" type="button">
               📤 Upload MITM certs (.tar.gz)
+            </button>
+            <button type="button" id="backupBtn">
+              📦 Backup configuration (.tar.gz)
             </button>
             <input
               type="file"
@@ -84,18 +89,13 @@
     </main>
 
     <script>
-      // button event listener
+      // button event listeners
       document.getElementById("downloadBtn").addEventListener("click", () => {
-        const now = new Date();
-        const filename =
-          `${now.getFullYear()}` +
-          `${String(now.getMonth() + 1).padStart(2, "0")}` +
-          `${String(now.getDate()).padStart(2, "0")}` +
-          `${String(now.getHours()).padStart(2, "0")}` +
-          `${String(now.getMinutes()).padStart(2, "0")}` +
-          `${String(now.getSeconds()).padStart(2, "0")}` +
-          `_aa-proxy-rs_logs.tar.gz`;
-        window.location.href = `/download?filename=${encodeURIComponent(filename)}`;
+        triggerDownload("/download", "logs");
+      });
+
+      document.getElementById("backupBtn").addEventListener("click", () => {
+        triggerDownload("/userdata_backup", "backup");
       });
 
       // Upload certs button logic
@@ -132,6 +132,24 @@
 
           fileInput.value = ""; // reset input so same file can be re-uploaded if needed
         });
+
+      function generateFilename(kind) {
+        const now = new Date();
+        const timestamp =
+          `${now.getFullYear()}` +
+          `${String(now.getMonth() + 1).padStart(2, "0")}` +
+          `${String(now.getDate()).padStart(2, "0")}` +
+          `${String(now.getHours()).padStart(2, "0")}` +
+          `${String(now.getMinutes()).padStart(2, "0")}` +
+          `${String(now.getSeconds()).padStart(2, "0")}`;
+        return `${timestamp}_aa-proxy-rs_${kind}.tar.gz`;
+      }
+
+      function triggerDownload(endpoint, kind) {
+        const filename = generateFilename(kind);
+        const url = `${endpoint}?filename=${encodeURIComponent(filename)}`;
+        window.location.href = url;
+      }
 
       function setValue(id, value) {
         const el = document.getElementById(id);
