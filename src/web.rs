@@ -17,17 +17,25 @@ use axum::{
 };
 use chrono::Local;
 use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use glob::glob;
 use hyper::body::to_bytes;
 use regex::Regex;
 use simplelog::*;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::{io::Cursor, path::Path, sync::Arc};
 use tar::Archive;
+use tar::Builder;
 use tokio::fs;
+use tokio::io::duplex;
 use tokio::io::AsyncWriteExt;
+use tokio::io::DuplexStream;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
+use tokio_util::io::ReaderStream;
 
 const TEMPLATE: &str = include_str!("../static/index.html");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
@@ -237,7 +245,8 @@ pub async fn battery_handler(
 
 fn generate_filename() -> String {
     let now = Local::now();
-    now.format("%Y%m%d%H%M%S_aa-proxy-rs.log").to_string()
+    now.format("%Y%m%d%H%M%S_aa-proxy-rs_logs.tar.gz")
+        .to_string()
 }
 
 async fn restart_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -269,21 +278,75 @@ async fn download_handler(
         .cloned()
         .unwrap_or_else(generate_filename);
 
-    match fs::read(file_path).await {
-        Ok(content) => Response::builder()
-            .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, "application/octet-stream")
-            .header(
-                header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", filename),
-            )
-            .body(Body::from(content))
-            .unwrap(),
-        Err(_) => Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::from("Cannot access log file"))
-            .unwrap(),
-    }
+    // Create an in-memory duplex stream (reader/writer pipe)
+    let (mut writer, reader): (DuplexStream, DuplexStream) = duplex(16 * 1024);
+
+    // Spawn background task to write tar.gz into the writer
+    tokio::spawn(async move {
+        let gz_encoder = GzEncoder::new(Vec::new(), Compression::default());
+        let mut tar_builder = Builder::new(gz_encoder);
+
+        // Create a set to track which absolute paths have been added
+        let mut added_paths: HashSet<PathBuf> = HashSet::new();
+
+        // Use glob to find matching files
+        let glob_patterns = vec!["/var/log/aa-proxy-*log", "/var/log/syslog"];
+        for pattern in glob_patterns {
+            match glob(pattern) {
+                Ok(paths) => {
+                    for entry in paths.flatten() {
+                        if entry.is_file() && added_paths.insert(entry.clone()) {
+                            let _ = tar_builder
+                                .append_path_with_name(&entry, entry.file_name().unwrap());
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("{} Invalid glob pattern '{}': {}", NAME, pattern, e);
+                }
+            }
+        }
+        // Add the configured log file unless it's already been added (e.g., via glob match)
+        if file_path.is_file() && added_paths.insert(file_path.clone()) {
+            let _ = tar_builder.append_path_with_name(&file_path, file_path.file_name().unwrap());
+        }
+
+        // Finalize the tar archive and retrieve the compressed byte buffer
+        match tar_builder.into_inner() {
+            Ok(gz_encoder) => match gz_encoder.finish() {
+                Ok(tar_gz_bytes) => {
+                    // Write the tar.gz bytes into the duplex writer
+                    if let Err(e) = writer.write_all(&tar_gz_bytes).await {
+                        error!("{} Failed to write tar.gz data: {}", NAME, e);
+                    }
+                }
+                Err(e) => {
+                    error!("{} Failed to finish gzip encoding: {}", NAME, e);
+                }
+            },
+            Err(e) => {
+                error!("{} Failed to finalize tar archive: {}", NAME, e);
+            }
+        }
+
+        // Shutdown the writer when done
+        let _ = writer.shutdown().await;
+    });
+
+    // Wrap the duplex reader in a stream for the response body
+    let stream = ReaderStream::new(reader);
+    let body = Body::wrap_stream(stream);
+
+    // Build HTTP response with appropriate headers
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/gzip")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}\"", filename),
+        )
+        .body(body)
+        .unwrap()
 }
 
 async fn upload_hex_model_handler(

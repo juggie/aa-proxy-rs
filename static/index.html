@@ -61,7 +61,7 @@
           <legend class="section-title"><strong>🚀 ACTIONS</strong></legend>
           <div class="grid grid-cols-2 section-body">
             <button type="button" onclick="saveConfig()">💾 Save</button>
-            <button type="button" id="downloadBtn">📥 Download log</button>
+            <button type="button" id="downloadBtn">📥 Download log package (.tar.gz)</button>
             <button type="button" onclick="window.location.href='/restart'">
               🧬 Apply / restart
             </button>
@@ -94,7 +94,7 @@
           `${String(now.getHours()).padStart(2, "0")}` +
           `${String(now.getMinutes()).padStart(2, "0")}` +
           `${String(now.getSeconds()).padStart(2, "0")}` +
-          `_aa-proxy-rs.log`;
+          `_aa-proxy-rs_logs.tar.gz`;
         window.location.href = `/download?filename=${encodeURIComponent(filename)}`;
       });
 
