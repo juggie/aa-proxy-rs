@@ -66,6 +66,7 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/upload-hex-model", post(upload_hex_model_handler))
         .route("/upload-certs", post(upload_cert_bundle_handler))
         .route("/battery", post(battery_handler))
+        .route("/userdata_backup", get(userdata_backup_handler))
         .with_state(state)
 }
 
@@ -519,6 +520,65 @@ pub async fn upload_cert_bundle_handler(
         StatusCode::OK,
         format!("Certificates uploaded to {}", CERT_DEST_DIR),
     )
+}
+
+async fn userdata_backup_handler(
+    State(_state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    // if we have filename parameter, use it; default otherwise
+    let filename = params
+        .get("filename")
+        .cloned()
+        .unwrap_or_else(|| generate_filename("backup"));
+
+    let (mut writer, reader): (DuplexStream, DuplexStream) = duplex(32 * 1024);
+
+    let backup_dir = Path::new("/data");
+
+    tokio::spawn(async move {
+        let gz_encoder = GzEncoder::new(Vec::new(), Compression::default());
+        let mut tar_builder = Builder::new(gz_encoder);
+        // preserve symlinks
+        tar_builder.follow_symlinks(false);
+
+        // Append everything in /data, recursively
+        if let Err(e) = tar_builder.append_dir_all(".", backup_dir) {
+            error!("{} Error archiving backup dir: {}", NAME, e);
+        }
+
+        // Finish and write to pipe
+        match tar_builder.into_inner() {
+            Ok(gz_encoder) => match gz_encoder.finish() {
+                Ok(tar_gz_bytes) => {
+                    if let Err(e) = writer.write_all(&tar_gz_bytes).await {
+                        error!("{} Failed to write tar.gz to stream: {}", NAME, e);
+                    }
+                }
+                Err(e) => {
+                    error!("{} Failed to finish gzip: {}", NAME, e);
+                }
+            },
+            Err(e) => {
+                error!("{} Failed to finalize tar archive: {}", NAME, e);
+            }
+        }
+
+        let _ = writer.shutdown().await;
+    });
+
+    let stream = ReaderStream::new(reader);
+    let body = Body::wrap_stream(stream);
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/gzip")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}\"", filename),
+        )
+        .body(body)
+        .unwrap()
 }
 
 async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
