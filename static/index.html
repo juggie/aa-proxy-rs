@@ -76,6 +76,12 @@
             <button type="button" id="backupBtn">
               📦 Backup configuration (.tar.gz)
             </button>
+            <button
+              type="button"
+              onclick="if (confirm('Are you sure you want to factory reset?')) { window.location.href='/factory-reset'; }"
+            >
+              ♻️ Factory reset
+            </button>
             <button type="button" data-endpoint="/userdata-restore">
               📤 Restore configuration (.tar.gz)
             </button>

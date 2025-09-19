@@ -70,6 +70,7 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/battery", post(battery_handler))
         .route("/userdata-backup", get(userdata_backup_handler))
         .route("/userdata-restore", post(userdata_restore_handler))
+        .route("/factory-reset", post(factory_reset_handler))
         .with_state(state)
 }
 
@@ -644,6 +645,26 @@ pub async fn userdata_restore_handler(
             "Backup data uploaded to {}\nDevice will now reboot!",
             save_path.display()
         ),
+    )
+}
+
+pub async fn factory_reset_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let save_path = Path::new("/data/factory-reset");
+
+    // Create an empty file to signal a factory reset
+    if let Err(err) = File::create(&save_path).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to create factory reset file: {}", err),
+        );
+    }
+
+    // request reboot
+    state.config.write().await.action_requested = Some(Action::Reboot);
+
+    (
+        StatusCode::OK,
+        "Factory reset requested. Device will now reboot.".to_string(),
     )
 }
 
