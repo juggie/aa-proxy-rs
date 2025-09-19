@@ -19,6 +19,7 @@ use chrono::Local;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use futures::StreamExt;
 use glob::glob;
 use hyper::body::to_bytes;
 use regex::Regex;
@@ -30,6 +31,7 @@ use std::{io::Cursor, path::Path, sync::Arc};
 use tar::Archive;
 use tar::Builder;
 use tokio::fs;
+use tokio::fs::File;
 use tokio::io::duplex;
 use tokio::io::AsyncWriteExt;
 use tokio::io::DuplexStream;
@@ -67,6 +69,7 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/upload-certs", post(upload_cert_bundle_handler))
         .route("/battery", post(battery_handler))
         .route("/userdata_backup", get(userdata_backup_handler))
+        .route("/userdata_restore", post(userdata_restore_handler))
         .with_state(state)
 }
 
@@ -579,6 +582,69 @@ async fn userdata_backup_handler(
         )
         .body(body)
         .unwrap()
+}
+
+pub async fn userdata_restore_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    RawBody(body): RawBody,
+) -> impl IntoResponse {
+    // Validate Content-Type header
+    let content_type = headers
+        .get("content-type")
+        .and_then(|ct| ct.to_str().ok())
+        .unwrap_or("");
+
+    if content_type != "application/gzip" && content_type != "application/x-gzip" {
+        return (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            format!("Unsupported Content-Type: {}", content_type),
+        );
+    }
+
+    // Create the file for writing
+    let save_path = Path::new("/data/pending_restore.tar.gz");
+    let mut file = match File::create(&save_path).await {
+        Ok(f) => f,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create file: {}", err),
+            );
+        }
+    };
+
+    // Convert body to stream and write to file in chunks
+    let mut stream = body;
+    while let Some(chunk_result) = stream.next().await {
+        match chunk_result {
+            Ok(chunk) => {
+                if let Err(err) = file.write_all(&chunk).await {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to write to file: {}", err),
+                    );
+                }
+            }
+            Err(err) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!("Error reading body chunk: {}", err),
+                );
+            }
+        }
+    }
+
+    // request reboot
+    state.config.write().await.action_requested = Some(Action::Reboot);
+
+    (
+        StatusCode::OK,
+        format!(
+            "Backup data uploaded to {}\nDevice will now reboot!",
+            save_path.display()
+        ),
+    )
 }
 
 async fn get_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
