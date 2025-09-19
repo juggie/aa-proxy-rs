@@ -243,9 +243,9 @@ pub async fn battery_handler(
     (StatusCode::OK, "OK").into_response()
 }
 
-fn generate_filename() -> String {
+fn generate_filename(kind: &str) -> String {
     let now = Local::now();
-    now.format("%Y%m%d%H%M%S_aa-proxy-rs_logs.tar.gz")
+    now.format(&format!("%Y%m%d%H%M%S_aa-proxy-rs_{}.tar.gz", kind))
         .to_string()
 }
 
@@ -276,7 +276,7 @@ async fn download_handler(
     let filename = params
         .get("filename")
         .cloned()
-        .unwrap_or_else(generate_filename);
+        .unwrap_or_else(|| generate_filename("logs"));
 
     // Create an in-memory duplex stream (reader/writer pipe)
     let (mut writer, reader): (DuplexStream, DuplexStream) = duplex(16 * 1024);
