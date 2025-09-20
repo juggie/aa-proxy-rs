@@ -121,7 +121,7 @@ pub struct AppConfig {
     pub ev_connector_types: EvConnectorTypes,
     pub enable_ssh: bool,
     pub wifi_version: u16,
-    pub band: f32,
+    pub band: String,
     pub country_code: String,
     pub channel: u8,
     pub ssid: String,
@@ -254,10 +254,11 @@ impl Default for AppConfig {
             band: {
                 if supports_5ghz_wifi().unwrap_or(false) {
                     // Eventually: Add check for 6 GHz
-                    5f32
+                    "5"
                 } else {
-                    2.4
+                    "2.4"
                 }
+                .to_string()
             },
             country_code: "US".to_string(),
             channel: {
@@ -349,7 +350,7 @@ impl AppConfig {
         doc["ev_connector_types"] = value(self.ev_connector_types.to_string());
         doc["enable_ssh"] = value(self.enable_ssh);
         doc["wifi_version"] = value(self.wifi_version as i64);
-        doc["band"] = value(self.band as f64);
+        doc["band"] = value(self.band.to_string());
         doc["country_code"] = value(&self.country_code);
         doc["channel"] = value(self.channel as i64);
         doc["ssid"] = value(&self.ssid);

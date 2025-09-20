@@ -373,7 +373,7 @@ fn generate_hostapd_conf(config: AppConfig) -> std::io::Result<()> {
     );
 
     // Technically for IEEE802.11g we have to use g but AFAIK b is fine.
-    let hostapd_mode = if config.band == 5.0 || config.band == 6.0 {
+    let hostapd_mode = if config.band == "5" || config.band == "6" {
         "a"
     } else {
         "b"
