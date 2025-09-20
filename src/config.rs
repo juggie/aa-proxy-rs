@@ -185,7 +185,7 @@ fn get_latest_wifi_version() -> std::io::Result<u16> {
     // for checking 6GHz: filter_iw_list("5955.0 MHz")
     // We don't use this right now. This is for future expansion with Wi-Fi 6E devices
 
-    if filter_iw_list("HE Iftypes: AP")? {
+    if filter_iw_list("HE PHY Capabilities")? {
         // 802.11ax
         Ok(6)
     } else if filter_iw_list("VHT Capabilities")? {
