@@ -7,9 +7,7 @@ This project is a DIY proxy tool that bridges a wireless Android phone with a US
 Originally derived from the [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project (specifically as
 a replacement for its `aawgd` component), it has since evolved into an independent and self-contained solution with its own development direction.
 
-As with the original project, our primary focus is on supporting the Raspberry Pi. However, other boards are also currently in development,
-including [AAWireless TWO](https://www.aawireless.io/en/products/aawireless-two) (thanks to collaboration with its creators)
-and the [Radxa Zero 3W](https://radxa.com/products/zeros/zero3w/).
+The project initially focused on supporting the Raspberry Pi, but has since grown to include other platforms as well.
 
 ![Hardware overview](images/aa-proxy-rs.webp)
 *Sample Connection Diagram – Raspberry Pi Zero 2 W*
@@ -41,11 +39,14 @@ There's also a great and supportive community on Discord built around this proje
 feel free to connect with us on the [aa-proxy Discord](https://discord.gg/c7JKdwHyZu) server.
 
 ## Supported Hardware
-This project is currently tested and built for the following Raspberry Pi boards that support USB OTG:
+This project is currently tested and built for the following boards that support USB OTG:
 - Raspberry Pi Zero W
 - Raspberry Pi Zero 2 W
 - Raspberry Pi 3 A+
 - Raspberry Pi 4
+- Raspberry Pi 5
+- [AAWireless TWO](https://www.aawireless.io/en/products/aawireless-two)
+- [Radxa Zero 3W](https://radxa.com/products/zeros/zero3w/)
 
 > [!NOTE]
 > **Raspberry Pi 3 B+ is _not_ supported** due to the lack of USB OTG support.
@@ -61,13 +62,11 @@ This project is currently tested and built for the following Raspberry Pi boards
 >   This can occasionally cause connection issues — especially during the initial pairing phase when both Wi-Fi and Bluetooth are active.
 >   The problem is particularly noticeable on devices like the **Raspberry Pi Zero 2 W**.
 
-Work is currently in progress to support additional hardware platforms, including:
-- **AAWireless TWO** – thanks to collaboration with its creators
-- **Radxa Zero 3W**
-
 In theory, support can be extended to other hardware platforms in the future, as long as the following basic requirements are met:
 - USB OTG or USB Gadget mode support
 - Wi-Fi and Bluetooth (either built-in or via external adapters)
+
+Some work is already underway to bring support to more hardware platforms. For the latest updates or specific questions, feel free to ask on Discord.
 
 The latest stable SD card images are available on the [Releases page](https://github.com/manio/aa-proxy-rs/releases).
 
@@ -201,13 +200,13 @@ Steps:
 [Mon Aug 25 15:24:43 2025] usb 3-1: new high-speed USB device number 84 using xhci_hcd
 [Mon Aug 25 15:24:43 2025] usb 3-1: New USB device found, idVendor=18d1, idProduct=2d00, bcdDevice= 6.12
 [Mon Aug 25 15:24:43 2025] usb 3-1: New USB device strings: Mfr=1, Product=2, SerialNumber=3
-[Mon Aug 25 15:24:43 2025] usb 3-1: Product: aa-proxy-rs
-[Mon Aug 25 15:24:43 2025] usb 3-1: Manufacturer: My Own
-[Mon Aug 25 15:24:43 2025] usb 3-1: SerialNumber: 0123456
+[Mon Aug 25 15:24:43 2025] usb 3-1: Product: aa-proxy-rs (Raspberry Pi Zero 2 W Rev 1.0)
+[Mon Aug 25 15:24:43 2025] usb 3-1: Manufacturer: aa-proxy
+[Mon Aug 25 15:24:43 2025] usb 3-1: SerialNumber: 00000000a3f7d2c9
 ```
 
 - Then launch DHU with:  
-`desktop-head-unit --usb=0123456`
+`desktop-head-unit --usb=00000000a3f7d2c9`
 - If you have problems, try to disable `legacy` mode
 
 #### 2. Without Raspberry Pi (host-only testing)
