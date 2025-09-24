@@ -14,7 +14,7 @@ default-run = "aa-proxy-rs"
 
 [dependencies]
 dbus = { version = "0.9.7", features = ["vendored"] }
-bluer = { version = "0.17.3", features = ["full"] }
+bluer = { version = "0.17.4", features = ["full"] }
 futures = "0.3.31"
 kobject-uevent = "0.1.1"
 netlink-sys = "0.8.6"
