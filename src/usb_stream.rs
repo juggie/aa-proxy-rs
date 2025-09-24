@@ -49,7 +49,6 @@ pub struct UsbStreamRead {
 }
 pub struct UsbStreamWrite {
     pub write_queue: Endpoint<Bulk, Out>,
-    write_buffer: Vec<u8>,
 }
 
 // switch a USB device to accessory mode
@@ -189,10 +188,7 @@ impl UsbStreamRead {
 
 impl UsbStreamWrite {
     pub fn new(write_queue: Endpoint<Bulk, Out>) -> Self {
-        UsbStreamWrite {
-            write_queue,
-            write_buffer: Vec::with_capacity(MAX_PACKET_SIZE),
-        }
+        UsbStreamWrite { write_queue }
     }
 }
 
