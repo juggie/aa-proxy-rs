@@ -53,6 +53,7 @@ use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 // for this, to be able to use it in a generic copy() function below.
 
 pub trait Endpoint<E> {
+    #[allow(async_fn_in_trait)]
     async fn read<T: BoundedBufMut>(&self, buf: T) -> BufResult<usize, T>;
     fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T>;
 }
@@ -221,6 +222,7 @@ pub async fn io_loop(
     let mut dhu_listener = None;
     let mut md_listener = None;
     let shared_config = config.clone();
+    #[allow(unused_variables)]
     let (client_handler, ev_tx) = spawn_ev_client_task().await;
 
     loop {
@@ -465,6 +467,7 @@ pub async fn io_loop(
         need_restart.notify_one();
     }
 
+    #[allow(unreachable_code)]
     // terminate ev client handler
     ev_tx.send(EvTaskCommand::Terminate).await?;
     client_handler.await?;
