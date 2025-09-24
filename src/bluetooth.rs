@@ -8,7 +8,7 @@ use bluer::{
     adv::AdvertisementHandle,
     agent::{Agent, AgentHandle},
     rfcomm::{Profile, ProfileHandle, Role, Stream},
-    Adapter, Address, Uuid,
+    Adapter, Address, Device, Uuid,
 };
 use futures::StreamExt;
 use simplelog::*;
@@ -281,6 +281,17 @@ async fn power_up_and_wait_for_connection(
     Ok((state, stream))
 }
 
+async fn cleanup_failed_bluetooth_connect(device: &Device) -> Result<()> {
+    let cleanup_delay = Duration::from_secs(2);
+    let _ = timeout(cleanup_delay, device.disconnect()).await;
+    debug!(
+        "{} Cleaned up bluetooth connection for device: {:?}",
+        NAME,
+        device.name().await
+    );
+    Ok(())
+}
+
 async fn try_connect_bluetooth_addresses(
     dongle_mode: bool,
     adapter: &Adapter,
@@ -339,7 +350,8 @@ async fn try_connect_bluetooth_addresses(
                                     warn!(
                                         "{} 🔇 {}{}: Error connecting: {}",
                                         NAME, addr, dev_name, e
-                                    )
+                                    );
+                                    cleanup_failed_bluetooth_connect(&device).await?;
                                 } else {
                                     info!(
                                     "{} 🔗 Connection success, waiting for AA profile connection: {}{}, ignored error: {}",
@@ -349,6 +361,7 @@ async fn try_connect_bluetooth_addresses(
                                 }
                             } else {
                                 warn!("{} Unknown bluetooth error: {}", NAME, e);
+                                cleanup_failed_bluetooth_connect(&device).await?;
                             }
                         }
                     }
