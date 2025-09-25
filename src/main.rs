@@ -376,7 +376,7 @@ fn generate_hostapd_conf(config: AppConfig) -> std::io::Result<()> {
     let hostapd_mode = if config.band == "5" || config.band == "6" {
         "a"
     } else {
-        "b"
+        "g"
     };
 
     let template = fs::read_to_string(HOSTAPD_CONF_IN)?;
