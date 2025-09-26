@@ -99,11 +99,14 @@ pub struct EvConnectorTypes(pub Option<Vec<EvConnectorType>>);
 
 impl EvConnectorTypes {
     fn to_string_internal(&self) -> String {
-        self.0
-            .iter()
-            .map(|t| format!("{:?}", t))
-            .collect::<Vec<String>>()
-            .join(",")
+        match &self.0 {
+            Some(types) => types
+                .iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<String>>()
+                .join(","),
+            None => "".to_string(),
+        }
     }
 }
 
