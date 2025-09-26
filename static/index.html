@@ -64,10 +64,10 @@
             <button type="button" id="downloadBtn">
               📜 Download log package (.tar.gz)
             </button>
-            <button type="button" onclick="window.location.href='/restart'">
+            <button type="button" onclick="handleAction('/restart')">
               🧬 Apply / restart
             </button>
-            <button type="button" onclick="window.location.href='/reboot'">
+            <button type="button" onclick="handleAction('/reboot')">
               🔁 Reboot device
             </button>
             <button type="button" data-endpoint="/upload-certs">
@@ -78,7 +78,7 @@
             </button>
             <button
               type="button"
-              onclick="if (confirm('Are you sure you want to factory reset?')) { window.location.href='/factory-reset'; }"
+              onclick="handleAction('/factory-reset', 'Are you sure you want to factory reset?')"
             >
               ♻️ Factory reset
             </button>
@@ -196,6 +196,25 @@
           return el.value ? parseFloat(el.value) : null;
         } else {
           return el.value;
+        }
+      }
+
+      async function handleAction(endpoint, confirmMessage = null) {
+        try {
+          if (confirmMessage && !confirm(confirmMessage)) {
+            return; // User canceled
+          }
+
+          const response = await fetch(endpoint, { method: "POST" });
+
+          if (!response.ok) {
+            throw new Error(`Status: ${response.status}`);
+          }
+
+          alert("✅ Request completed successfully!");
+        } catch (error) {
+          console.error("Request failed:", error);
+          alert("❌ Request failed.");
         }
       }
 
