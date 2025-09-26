@@ -212,13 +212,29 @@
       async function saveConfig() {
         const config = {};
         const ids = [{CONFIG_IDS}];
-        ids.forEach((id) => (config[id] = getValue(id)));
-        await fetch("/config", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(config),
+
+        ids.forEach((id) => {
+          config[id] = getValue(id);
         });
-        alert("Configuration saved!");
+
+        try {
+          const response = await fetch("/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(config),
+          });
+
+          if (!response.ok) {
+            // Try to get error message from the response
+            const errorText = await response.text();
+            throw new Error(`Error ${response.status}: ${errorText}`);
+          }
+
+          alert("✅ Configuration saved successfully!");
+        } catch (error) {
+          console.error("❌ Failed to save configuration:", error);
+          alert(`❌ Failed to save configuration:\n${error.message}`);
+        }
       }
 
       loadConfig();
