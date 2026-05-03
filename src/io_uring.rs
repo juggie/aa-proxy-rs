@@ -474,7 +474,10 @@ pub async fn io_loop(
             info!("{} 💤 waiting for bluetooth handshake...", NAME);
             tcp_start.notified().await;
 
-            info!("{} 🛰️ MD TCP server: listening for phone connection...", NAME);
+            info!(
+                "{} 🛰️ MD TCP server: listening for phone connection...",
+                NAME
+            );
             if let Ok((s, ip)) = tcp_wait_for_connection(&mut md_listener.as_mut().unwrap()).await {
                 md_tcp = Some(s);
                 client_mac = mac_from_ipv4(ip).await.unwrap_or(None);
