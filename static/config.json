@@ -203,7 +203,7 @@
         },
         "bt_connect_timeout_secs": {
           "typ": "integer",
-          "description": "Maximum seconds to wait for a single Bluetooth connect_profile() attempt per device [seconds]. When multiple devices are listed in `connect`, each gets one attempt per round before any device is retried. Lower values skip to the next device faster when a phone is absent. Default: 10"
+          "description": "Maximum seconds to wait for a single Bluetooth connection attempt per device [seconds]. When multiple devices are listed in `connect`, each gets one attempt per round before any device is retried. Lower values skip to the next device faster when a phone is absent. Default: 10"
         },
         "iface": {
           "typ": "string",
