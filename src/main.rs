@@ -491,6 +491,7 @@ async fn tokio_main(
                             wifi_conf.clone(),
                             tcp_start.clone(),
                             Duration::from_secs(cfg.bt_timeout_secs.into()),
+                            Duration::from_secs(cfg.bt_connect_timeout_secs.into()),
                             cfg.action_requested == Some(Action::Stop),
                             cfg.quick_reconnect,
                             cfg.bt_poweroff,

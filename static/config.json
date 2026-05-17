@@ -201,6 +201,10 @@
           "typ": "integer",
           "description": "Bluetooth handshake timeout [seconds], this is for rare cases when the phone stops responding, to prevent the bluetooth handshake deadlock with inifite waiting and not restarting connection again"
         },
+        "bt_connect_timeout_secs": {
+          "typ": "integer",
+          "description": "Maximum seconds to wait for a single Bluetooth connect_profile() attempt per device [seconds]. When multiple devices are listed in `connect`, each gets one attempt per round before any device is retried. Lower values skip to the next device faster when a phone is absent. Default: 10"
+        },
         "iface": {
           "typ": "string",
           "description": "WLAN / Wi-Fi Hotspot interface (for obtaining IP and BSSID)"

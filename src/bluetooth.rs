@@ -393,6 +393,7 @@ impl Bluetooth {
         &mut self,
         connect: BluetoothAddressList,
         bt_timeout: Duration,
+        bt_connect_timeout: Duration,
         stopped: bool,
     ) -> Result<(Address, Stream)> {
         info!("{} ⏳ Waiting for phone to connect via bluetooth...", NAME);
@@ -426,6 +427,7 @@ impl Bluetooth {
                                 &adapter_cloned,
                                 &addresses,
                                 self.current_index,
+                                bt_connect_timeout,
                             )
                             .await?;
 
@@ -511,6 +513,7 @@ impl Bluetooth {
         adapter: &Adapter,
         addresses: &Vec<Address>,
         start_index: usize,
+        bt_connect_timeout: Duration,
     ) -> Result<usize> {
         let n = addresses.len();
 
@@ -554,16 +557,25 @@ impl Bluetooth {
                     NAME, addr, dev_name, j, ATTEMPTS
                 );
                 if let Ok(true) = device.is_paired().await {
-                    match device.connect_profile(&HSP_AG_UUID).await {
-                        Ok(_) => {
+                    match timeout(bt_connect_timeout, device.connect_profile(&HSP_AG_UUID)).await {
+                        Ok(Ok(_)) => {
                             info!(
                                 "{} 🔗 Successfully connected to device: {}{}",
                                 NAME, addr, dev_name
                             );
                             return Ok((*idx + 1) % n);
                         }
-                        Err(e) => {
+                        Ok(Err(e)) => {
                             warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e)
+                        }
+                        Err(_) => {
+                            warn!(
+                                "{} ⏱️ {}{}: connect_profile timed out after {}s",
+                                NAME,
+                                addr,
+                                dev_name,
+                                bt_connect_timeout.as_secs()
+                            );
                         }
                     }
                 } else {
@@ -635,6 +647,7 @@ impl Bluetooth {
         wifi_config: WifiConfig,
         tcp_start: Arc<Notify>,
         bt_timeout: Duration,
+        bt_connect_timeout: Duration,
         stopped: bool,
         quick_reconnect: bool,
         bt_poweroff: bool,
@@ -736,7 +749,7 @@ impl Bluetooth {
 
         // Use the provided session and adapter instead of creating new ones
         let (address, mut stream) = self
-            .get_aa_profile_connection(connect, bt_timeout, stopped)
+            .get_aa_profile_connection(connect, bt_timeout, bt_connect_timeout, stopped)
             .await?;
 
         let phone_name = match self.adapter.device(address) {

@@ -259,6 +259,9 @@ pub struct AppConfig {
     )]
     pub webserver: Option<String>,
     pub bt_timeout_secs: u16,
+    /// Maximum seconds to wait for a single connect_profile() attempt per device.
+    /// Lower values skip to the next device faster when a phone is absent.
+    pub bt_connect_timeout_secs: u16,
     pub mitm: bool,
     pub dpi: u16,
     pub audio_max_unacked: u8,
@@ -562,6 +565,7 @@ impl Default for AppConfig {
             timeout_secs: 10,
             webserver: webserver_default_bind(),
             bt_timeout_secs: 120,
+            bt_connect_timeout_secs: 10,
             mitm: false,
             dpi: 0,
             audio_max_unacked: 0,
@@ -823,6 +827,7 @@ impl AppConfig {
             doc["webserver"] = value(webserver);
         }
         doc["bt_timeout_secs"] = value(self.bt_timeout_secs as i64);
+        doc["bt_connect_timeout_secs"] = value(self.bt_connect_timeout_secs as i64);
         doc["mitm"] = value(self.mitm);
         doc["dpi"] = value(self.dpi as i64);
         doc["audio_max_unacked"] = value(self.audio_max_unacked as i64);
